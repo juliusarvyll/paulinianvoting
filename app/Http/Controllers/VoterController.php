@@ -159,15 +159,12 @@ class VoterController extends Controller
 
             DB::commit();
 
-            // Prepare the response first before clearing session
-            $response = redirect()->route('welcome')
-                ->with('success', 'Your vote has been recorded successfully.');
-
-            // Clear voter session after preparing the response
+            // Clear voter session
             session()->forget('voter_id');
 
-            // Return the already prepared response
-            return $response;
+            // Redirect to welcome page with success message
+            return redirect()->route('welcome')
+                ->with('success', 'Your vote has been recorded successfully.');
 
         } catch (\Exception $e) {
             DB::rollBack();

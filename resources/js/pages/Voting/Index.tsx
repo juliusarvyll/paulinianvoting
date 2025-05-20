@@ -141,9 +141,9 @@ export default function VotingIndex({ voter, election, positions }: Props) {
 
         // Post to the route with the proper options
         post(route('voter.cast-vote'), {
-            preserveScroll: true,
             onSuccess: () => {
                 console.log('Vote cast successfully');
+                window.location.href = route('welcome');
             },
             onError: (errors: Record<string, string>) => {
                 console.error('Error casting vote:', errors);
