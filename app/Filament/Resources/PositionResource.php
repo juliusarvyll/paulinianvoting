@@ -18,6 +18,11 @@ class PositionResource extends Resource
 
     protected static ?string $navigationGroup = 'Election Management';
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_position');
+    }
+
     public static function form(Form $form): Form
     {
         return $form

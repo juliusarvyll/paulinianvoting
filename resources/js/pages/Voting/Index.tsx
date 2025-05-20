@@ -85,16 +85,27 @@ export default function VotingIndex({ voter, election, positions }: Props) {
     };
 
     const handleVoteChange = (positionId: number, candidateId: number) => {
-        setSelectedCandidates((prev) => ({
-            ...prev,
-            [positionId]: candidateId,
-        }));
+        setSelectedCandidates((prev) => {
+            // If the same candidate is clicked again, remove the selection
+            if (prev[positionId] === candidateId) {
+                const newSelected = { ...prev };
+                delete newSelected[positionId];
+                return newSelected;
+            }
+            // Otherwise, update the selection
+            return {
+                ...prev,
+                [positionId]: candidateId,
+            };
+        });
 
         // Update form data whenever votes change
-        const updatedSelectedCandidates = {
-            ...selectedCandidates,
-            [positionId]: candidateId
-        };
+        const updatedSelectedCandidates = { ...selectedCandidates };
+        if (updatedSelectedCandidates[positionId] === candidateId) {
+            delete updatedSelectedCandidates[positionId];
+        } else {
+            updatedSelectedCandidates[positionId] = candidateId;
+        }
 
         const formattedVotes = Object.entries(updatedSelectedCandidates).map(([posId, candId]) => {
             return {
@@ -107,13 +118,6 @@ export default function VotingIndex({ voter, election, positions }: Props) {
     };
 
     const handleSubmit = () => {
-        const currentVotes = Object.values(selectedCandidates);
-
-        if (currentVotes.length === 0) {
-            alert('Please select at least one candidate before submitting.');
-            return;
-        }
-
         // Format votes with just position_id and candidate_id
         // voter_id is already in the form data
         const formattedVotes = Object.entries(selectedCandidates).map(([positionId, candidateId]) => {
@@ -326,7 +330,7 @@ export default function VotingIndex({ voter, election, positions }: Props) {
                         <div className="mt-8 flex justify-end">
                             <button
                                 onClick={handleSubmit}
-                                disabled={processing || Object.keys(selectedCandidates).length === 0}
+                                disabled={processing}
                                 className="rounded-md bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
                             >
                                 {processing ? 'Submitting...' : 'Submit Vote'}

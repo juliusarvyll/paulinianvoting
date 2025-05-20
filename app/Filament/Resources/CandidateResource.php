@@ -18,6 +18,11 @@ class CandidateResource extends Resource
 
     protected static ?string $navigationGroup = 'Election Management';
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_candidate');
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -36,6 +41,9 @@ class CandidateResource extends Resource
                     ->preload(),
                 Forms\Components\Select::make('position_id')
                     ->relationship('position', 'name')
+                    ->getOptionLabelFromRecordUsing(fn ($record) =>
+                        "{$record->name} ({$record->level})"
+                    )
                     ->required()
                     ->searchable()
                     ->preload()

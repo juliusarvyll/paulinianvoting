@@ -19,6 +19,11 @@ class VoterResource extends Resource
 
     protected static ?string $navigationGroup = 'Voter Management';
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_voter');
+    }
+
     public static function form(Form $form): Form
     {
         return $form

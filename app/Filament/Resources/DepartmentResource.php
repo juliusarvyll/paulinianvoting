@@ -18,6 +18,11 @@ class DepartmentResource extends Resource
 
     protected static ?string $navigationGroup = 'Academic Management';
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_department');
+    }
+
     public static function form(Form $form): Form
     {
         return $form

@@ -7,6 +7,7 @@ use App\Models\Election;
 use App\Models\Position;
 use App\Models\Candidate;
 use App\Models\Vote;
+use App\Models\Course;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -98,9 +99,9 @@ class VoterController extends Controller
     {
         // Validate inputs
         $request->validate([
-            'votes' => ['required', 'array'],
-            'votes.*.candidate_id' => ['required', 'exists:candidates,id'],
-            'votes.*.position_id' => ['required', 'exists:positions,id'],
+            'votes' => ['nullable', 'array'],
+            'votes.*.candidate_id' => ['required_with:votes', 'exists:candidates,id'],
+            'votes.*.position_id' => ['required_with:votes', 'exists:positions,id'],
             'voter_id' => ['sometimes', 'exists:voters,id'],
         ]);
 
@@ -136,19 +137,21 @@ class VoterController extends Controller
                 'session_voter_id' => $voterId
             ]);
 
-            // Record votes
-            foreach ($request->votes as $vote) {
-                // Verify that the candidate belongs to the position
-                $candidate = Candidate::where('id', $vote['candidate_id'])
-                    ->where('position_id', $vote['position_id'])
-                    ->firstOrFail();
+            // Record votes if any were submitted
+            if ($request->has('votes') && !empty($request->votes)) {
+                foreach ($request->votes as $vote) {
+                    // Verify that the candidate belongs to the position
+                    $candidate = Candidate::where('id', $vote['candidate_id'])
+                        ->where('position_id', $vote['position_id'])
+                        ->firstOrFail();
 
-                // Create the vote record using server-validated IDs
-                Vote::create([
-                    'voter_id' => $voter->id, // Always use the authenticated voter from session
-                    'candidate_id' => $vote['candidate_id'],
-                    'position_id' => $vote['position_id'],
-                ]);
+                    // Create the vote record using server-validated IDs
+                    Vote::create([
+                        'voter_id' => $voter->id, // Always use the authenticated voter from session
+                        'candidate_id' => $vote['candidate_id'],
+                        'position_id' => $vote['position_id'],
+                    ]);
+                }
             }
 
             // Mark voter as voted
@@ -180,5 +183,47 @@ class VoterController extends Controller
     {
         session()->forget('voter_id');
         return redirect()->route('welcome');
+    }
+
+    public function showRegistrationForm()
+    {
+        $courses = Course::select('id', 'course_name')->get();
+        return Inertia::render('voter/register', [
+            'courses' => $courses
+        ]);
+    }
+
+    public function register(Request $request)
+    {
+        $request->validate([
+            'code' => 'required|string|unique:voters,code',
+            'last_name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'sex' => 'required|in:M,F',
+            'course_id' => 'required|exists:courses,id',
+            'year_level' => 'required|integer|between:1,4',
+        ]);
+
+        try {
+            $voter = Voter::create([
+                'code' => $request->code,
+                'last_name' => $request->last_name,
+                'first_name' => $request->first_name,
+                'middle_name' => $request->middle_name,
+                'sex' => $request->sex,
+                'course_id' => $request->course_id,
+                'year_level' => $request->year_level,
+                'has_voted' => false,
+            ]);
+
+            return redirect()->route('welcome')
+                ->with('success', 'Registration successful! You can now login with your student ID.');
+
+        } catch (\Exception $e) {
+            return back()->withErrors([
+                'error' => 'An error occurred during registration. Please try again.'
+            ]);
+        }
     }
 }

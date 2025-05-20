@@ -117,9 +117,9 @@ export default function Welcome() {
                             </form>
 
                             <div className="mt-6 text-center">
-                                <a href={route('results.public')} className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
-                                    View Live Election Results
-                                </a>
+                                <Link href={route('voter.register')} className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300">
+                                    Register as a Voter
+                                </Link>
                             </div>
                         </div>
                     </main>

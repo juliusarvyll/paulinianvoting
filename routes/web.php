@@ -16,6 +16,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::post('/voter/login', [VoterController::class, 'login'])->name('voter.login');
+
+// Voter Registration Routes
+Route::get('/voter/register', [VoterController::class, 'showRegistrationForm'])->name('voter.register');
+Route::post('/voter/register', [VoterController::class, 'register'])->name('voter.register.submit');
+
 Route::middleware(['voter'])->group(function () {
     Route::get('/voting', [VoterController::class, 'voting'])->name('voting');
     Route::post('/voter/cast-vote', [VoterController::class, 'castVote'])->name('voter.cast-vote');
