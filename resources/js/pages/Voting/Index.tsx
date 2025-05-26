@@ -74,7 +74,7 @@ interface Props {
 
 export default function VotingIndex({ voter, election, positions }: Props) {
     const { appearance, updateAppearance } = useAppearance();
-    const [selectedCandidates, setSelectedCandidates] = useState<Record<number, number>>({});
+    const [selectedCandidates, setSelectedCandidates] = useState<Record<number, number[]>>({});
     const { data, setData, post, processing, errors: formErrors } = useForm<VoteFormData>({
         votes: [],
         voter_id: voter.id,
@@ -84,61 +84,47 @@ export default function VotingIndex({ voter, election, positions }: Props) {
         updateAppearance(appearance === 'dark' ? 'light' : 'dark');
     };
 
-    const handleVoteChange = (positionId: number, candidateId: number) => {
+    const handleVoteChange = (position: Position, candidateId: number) => {
         setSelectedCandidates((prev) => {
-            // If the same candidate is clicked again, remove the selection
-            if (prev[positionId] === candidateId) {
-                const newSelected = { ...prev };
-                delete newSelected[positionId];
-                return newSelected;
+            const current = prev[position.id] || [];
+            let updated: number[];
+            if (current.includes(candidateId)) {
+                // Remove candidate if already selected
+                updated = current.filter(id => id !== candidateId);
+            } else {
+                // Add candidate if under max_winners
+                if (current.length < position.max_winners) {
+                    updated = [...current, candidateId];
+                } else {
+                    // Optionally, show a message or ignore
+                    updated = current; // No change if max reached
+                }
             }
-            // Otherwise, update the selection
             return {
                 ...prev,
-                [positionId]: candidateId,
+                [position.id]: updated,
             };
         });
-
-        // Update form data whenever votes change
-        const updatedSelectedCandidates = { ...selectedCandidates };
-        if (updatedSelectedCandidates[positionId] === candidateId) {
-            delete updatedSelectedCandidates[positionId];
-        } else {
-            updatedSelectedCandidates[positionId] = candidateId;
-        }
-
-        const formattedVotes = Object.entries(updatedSelectedCandidates).map(([posId, candId]) => {
-            return {
-                position_id: parseInt(posId),
-                candidate_id: candId
-            };
-        });
-
-        setData('votes', formattedVotes);
     };
 
     const handleSubmit = () => {
         // Format votes with just position_id and candidate_id
         // voter_id is already in the form data
-        const formattedVotes = Object.entries(selectedCandidates).map(([positionId, candidateId]) => {
-            return {
+        const formattedVotes = Object.entries(selectedCandidates).flatMap(([positionId, candidateIds]) =>
+            (candidateIds as number[]).map(candidateId => ({
                 position_id: parseInt(positionId),
                 candidate_id: candidateId
-            };
-        });
-
+            }))
+        );
         // Log for debugging
         console.log('Formatted votes:', formattedVotes);
-
         // Update the votes array in the form data
         setData('votes', formattedVotes);
-
         // Log what will be submitted
         console.log('Full form data to be submitted:', {
             votes: formattedVotes,
             voter_id: voter.id
         });
-
         // Post to the route with the proper options
         post(route('voter.cast-vote'), {
             onSuccess: () => {
@@ -159,7 +145,7 @@ export default function VotingIndex({ voter, election, positions }: Props) {
                     ? 'border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-900'
                     : 'border-gray-200 hover:border-indigo-300 dark:border-gray-700 dark:hover:border-indigo-600'
             }`}
-            onClick={() => handleVoteChange(position.id, candidate.id)}
+            onClick={() => handleVoteChange(position, candidate.id)}
         >
             <div className="flex items-center gap-4">
                 <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-full">
@@ -232,7 +218,7 @@ export default function VotingIndex({ voter, election, positions }: Props) {
                                 renderCandidateCard(
                                     candidate,
                                     position,
-                                    selectedCandidates[position.id] === candidate.id
+                                    (selectedCandidates[position.id] || []).includes(candidate.id)
                                 )
                             )}
                         </div>
