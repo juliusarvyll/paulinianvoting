@@ -1,6 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useAppearance } from '@/hooks/use-appearance';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type VoteData = {
     votes: number[];
@@ -107,25 +107,19 @@ export default function VotingIndex({ voter, election, positions }: Props) {
         });
     };
 
-    const handleSubmit = () => {
-        // Format votes with just position_id and candidate_id
-        // voter_id is already in the form data
+    useEffect(() => {
         const formattedVotes = Object.entries(selectedCandidates).flatMap(([positionId, candidateIds]) =>
             (candidateIds as number[]).map(candidateId => ({
                 position_id: parseInt(positionId),
                 candidate_id: candidateId
             }))
         );
-        // Log for debugging
-        console.log('Formatted votes:', formattedVotes);
-        // Update the votes array in the form data
         setData('votes', formattedVotes);
-        // Log what will be submitted
-        console.log('Full form data to be submitted:', {
-            votes: formattedVotes,
-            voter_id: voter.id
-        });
-        // Post to the route with the proper options
+    }, [selectedCandidates]);
+
+    const handleSubmit = () => {
+        console.log('selectedCandidates:', selectedCandidates);
+        console.log('Formatted votes:', data.votes);
         post(route('voter.cast-vote'), {
             onSuccess: () => {
                 console.log('Vote cast successfully');
