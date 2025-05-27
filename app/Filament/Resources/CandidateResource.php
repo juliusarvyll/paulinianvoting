@@ -60,7 +60,26 @@ class CandidateResource extends Resource
                     ->relationship('department', 'department_name')
                     ->searchable()
                     ->preload()
+                    ->reactive()
+                    ->afterStateHydrated(function ($set, $get, $record) {
+                        if ($record && $record->voter && $record->voter->course && $record->voter->course->department_id && !$get('department_id')) {
+                            $set('department_id', $record->voter->course->department_id);
+                        }
+                    })
+                    ->afterStateUpdated(function ($set, $get) {
+                        $position = \App\Models\Position::find($get('position_id'));
+                        if ($position && $position->level === 'department') {
+                            $voter = \App\Models\Voter::find($get('voter_id'));
+                            if ($voter && $voter->course && $voter->course->department_id) {
+                                $set('department_id', $voter->course->department_id);
+                            }
+                        }
+                    })
                     ->visible(fn ($get) =>
+                        $get('position_id') &&
+                        \App\Models\Position::find($get('position_id'))?->level === 'department'
+                    )
+                    ->disabled(fn ($get) =>
                         $get('position_id') &&
                         \App\Models\Position::find($get('position_id'))?->level === 'department'
                     ),

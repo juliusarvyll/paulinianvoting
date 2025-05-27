@@ -16,4 +16,18 @@ class EditCandidate extends EditRecord
             Actions\DeleteAction::make(),
         ];
     }
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $voter = \App\Models\Voter::find($data['voter_id']);
+        $data['department_id'] = $voter?->course?->department_id;
+        return $data;
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $voter = \App\Models\Voter::find($data['voter_id']);
+        $data['department_id'] = $voter?->course?->department_id;
+        return $data;
+    }
 }

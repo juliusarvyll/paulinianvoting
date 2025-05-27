@@ -44,6 +44,7 @@ class VoterController extends Controller
         }
 
         $voter = Voter::with(['course.department'])->findOrFail(session('voter_id'));
+        $departments = \App\Models\Department::select('id', 'department_name')->get();
 
         // Get active election
         $election = Election::where('is_active', true)->first();
@@ -92,6 +93,7 @@ class VoterController extends Controller
                 'course' => $coursePositions,
                 'year_level' => $yearLevelPositions,
             ],
+            'departments' => $departments,
         ]);
     }
 
@@ -184,8 +186,10 @@ class VoterController extends Controller
 
     public function showRegistrationForm()
     {
-        $courses = Course::select('id', 'course_name')->get();
+        $departments = \App\Models\Department::select('id', 'department_name')->get();
+        $courses = \App\Models\Course::select('id', 'course_name', 'department_id')->get();
         return Inertia::render('voter/register', [
+            'departments' => $departments,
             'courses' => $courses
         ]);
     }
@@ -199,6 +203,7 @@ class VoterController extends Controller
             'middle_name' => 'nullable|string|max:255',
             'sex' => 'required|in:M,F',
             'course_id' => 'required|exists:courses,id',
+            'department_id' => 'required|exists:departments,id',
             'year_level' => 'required|integer|between:1,4',
         ]);
 
@@ -210,6 +215,7 @@ class VoterController extends Controller
                 'middle_name' => $request->middle_name,
                 'sex' => $request->sex,
                 'course_id' => $request->course_id,
+                'department_id' => $request->department_id,
                 'year_level' => $request->year_level,
                 'has_voted' => false,
             ]);

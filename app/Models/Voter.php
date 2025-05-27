@@ -15,6 +15,7 @@ class Voter extends Model
         'first_name',
         'middle_name',
         'sex',
+        'department_id',
         'course_id',
         'year_level',
         'has_voted',

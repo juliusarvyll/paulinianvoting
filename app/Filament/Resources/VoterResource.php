@@ -10,6 +10,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Forms\Set;
 
 class VoterResource extends Resource
 {
@@ -46,11 +47,24 @@ class VoterResource extends Resource
                         'Male' => 'Male',
                         'Female' => 'Female',
                     ]),
+                Forms\Components\Select::make('department_id')
+                    ->label('Department')
+                    ->options(\App\Models\Department::pluck('department_name', 'id'))
+                    ->reactive()
+                    ->afterStateUpdated(fn (Set $set) => $set('course_id', null)),
                 Forms\Components\Select::make('course_id')
-                    ->relationship('course', 'course_name')
+                    ->label('Course')
+                    ->options(function (callable $get) {
+                        $departmentId = $get('department_id');
+                        if (!$departmentId) {
+                            return \App\Models\Course::pluck('course_name', 'id');
+                        }
+                        return \App\Models\Course::where('department_id', $departmentId)->pluck('course_name', 'id');
+                    })
                     ->required()
                     ->searchable()
-                    ->preload(),
+                    ->preload()
+                    ->reactive(),
                 Forms\Components\Select::make('year_level')
                     ->required()
                     ->options([

@@ -34,7 +34,7 @@ class ResultsController extends Controller
 
         // Get voter statistics
         $totalVoters = Voter::count();
-        $votersTurnout = Voter::where('has_voted', true)->count();
+        $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
 
         return Inertia::render('Results/Index', [
             'election' => $election,
@@ -62,7 +62,7 @@ class ResultsController extends Controller
 
         // Get voter statistics
         $totalVoters = Voter::count();
-        $votersTurnout = Voter::where('has_voted', true)->count();
+        $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
 
         return response()->json([
             'positions' => [
@@ -81,12 +81,33 @@ class ResultsController extends Controller
      */
     private function getPositionsWithCandidates($level)
     {
-        return Position::where('level', $level)
-            ->with(['candidates' => function ($query) {
-                $query->withCount('votes')
-                    ->with('voter:id,first_name,last_name,middle_name');
-            }])
+        $positions = Position::where('level', $level)
+            ->with([
+                'candidates' => function ($query) {
+                    $query->withCount('votes')
+                        ->with([
+                            'voter:id,first_name,last_name,middle_name,course_id',
+                            'department',
+                            'voter.course.department',
+                        ]);
+                }
+            ])
             ->get();
+
+        // For department-level positions, attach department directly to each candidate
+        if ($level === 'department') {
+            $positions->transform(function ($position) {
+                $position->candidates->transform(function ($candidate) {
+                    // Always provide department directly, fallback to voter's course department if needed
+                    $department = $candidate->department ?: ($candidate->voter->course->department ?? null);
+                    $candidate->department = $department;
+                    return $candidate;
+                });
+                return $position;
+            });
+        }
+
+        return $positions;
     }
 
     /**
@@ -110,7 +131,7 @@ class ResultsController extends Controller
 
         // Get voter statistics
         $totalVoters = Voter::count();
-        $votersTurnout = Voter::where('has_voted', true)->count();
+        $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
 
         return Inertia::render('Results/Public', [
             'election' => $election,

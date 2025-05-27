@@ -6,6 +6,11 @@ interface PageProps extends SharedData {
     courses: Array<{
         id: number;
         course_name: string;
+        department_id: number;
+    }>;
+    departments: Array<{
+        id: number;
+        department_name: string;
     }>;
     flash?: {
         error?: string;
@@ -14,7 +19,7 @@ interface PageProps extends SharedData {
 }
 
 export default function Register() {
-    const { courses, flash = {} } = usePage<PageProps>().props;
+    const { courses, departments, flash = {} } = usePage<PageProps>().props;
     const { data, setData, post, processing, errors } = useForm({
         code: '',
         last_name: '',
@@ -22,6 +27,7 @@ export default function Register() {
         middle_name: '',
         sex: '',
         course_id: '',
+        department_id: '',
         year_level: '',
     });
 
@@ -34,6 +40,11 @@ export default function Register() {
             preserveScroll: true,
         });
     };
+
+    // Filter courses by selected department
+    const filteredCourses = data.department_id
+        ? courses.filter(course => String(course.department_id) === String(data.department_id))
+        : [];
 
     return (
         <>
@@ -136,6 +147,27 @@ export default function Register() {
                         </div>
 
                         <div>
+                            <label htmlFor="department_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Department
+                            </label>
+                            <select
+                                id="department_id"
+                                value={data.department_id}
+                                onChange={e => setData('department_id', e.target.value)}
+                                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+                                required
+                            >
+                                <option value="">Select department</option>
+                                {departments.map(department => (
+                                    <option key={department.id} value={department.id}>
+                                        {department.department_name}
+                                    </option>
+                                ))}
+                            </select>
+                            {errors.department_id && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.department_id}</p>}
+                        </div>
+
+                        <div>
                             <label htmlFor="course_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Course
                             </label>
@@ -145,9 +177,10 @@ export default function Register() {
                                 onChange={e => setData('course_id', e.target.value)}
                                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
                                 required
+                                disabled={!data.department_id}
                             >
                                 <option value="">Select course</option>
-                                {courses.map(course => (
+                                {filteredCourses.map(course => (
                                     <option key={course.id} value={course.id}>
                                         {course.course_name}
                                     </option>

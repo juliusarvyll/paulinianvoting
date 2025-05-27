@@ -1,6 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useAppearance } from '@/hooks/use-appearance';
 import { useState, useEffect } from 'react';
+import { router } from '@inertiajs/react';
 
 type VoteData = {
     votes: number[];
@@ -51,11 +52,9 @@ interface Props {
         course: {
             id: number;
             course_name: string;
-            department: {
-                id: number;
-                name: string;
-            };
+            department_id: number;
         };
+        department_id: number;
         year_level: number;
     };
     election: {
@@ -70,15 +69,17 @@ interface Props {
         course: Position[];
         year_level: Position[];
     };
+    departments?: Array<{ id: number; department_name: string }>;
 }
 
-export default function VotingIndex({ voter, election, positions }: Props) {
+export default function VotingIndex({ voter, election, positions, departments = [] }: Props) {
     const { appearance, updateAppearance } = useAppearance();
     const [selectedCandidates, setSelectedCandidates] = useState<Record<number, number[]>>({});
     const { data, setData, post, processing, errors: formErrors } = useForm<VoteFormData>({
         votes: [],
         voter_id: voter.id,
     });
+    const [showReceipt, setShowReceipt] = useState(false);
 
     const toggleTheme = () => {
         updateAppearance(appearance === 'dark' ? 'light' : 'dark');
@@ -222,6 +223,50 @@ export default function VotingIndex({ voter, election, positions }: Props) {
         </div>
     );
 
+    const renderReceipt = () => (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-lg w-full shadow-lg">
+                <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Vote Receipt</h2>
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {Object.entries(selectedCandidates).map(([positionId, candidateIds]) => {
+                        const position = Object.values(positions).flat().find(p => p.id === Number(positionId));
+                        if (!position) return null;
+                        return (
+                            <div key={positionId}>
+                                <h4 className="font-medium text-gray-800 dark:text-gray-200">{position.name}</h4>
+                                <ul className="ml-4 list-disc">
+                                    {candidateIds.map(cid => {
+                                        const candidate = position.candidates.find(c => c.id === cid);
+                                        if (!candidate) return null;
+                                        return (
+                                            <li key={cid}>
+                                                {candidate.voter.last_name}, {candidate.voter.first_name} {candidate.voter.middle_name}
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                    <button
+                        onClick={() => setShowReceipt(false)}
+                        className="rounded-md bg-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-400 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                    >
+                        Confirm & Submit
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <>
             <Head title="Vote" />
@@ -256,14 +301,13 @@ export default function VotingIndex({ voter, election, positions }: Props) {
                                     </svg>
                                 )}
                             </button>
-                            <form action={route('voter.logout')} method="POST">
-                                <button
-                                    type="submit"
-                                    className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                                >
-                                    Logout
-                                </button>
-                            </form>
+                            <button
+                                type="button"
+                                onClick={() => router.post(route('voter.logout'))}
+                                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                            >
+                                Logout
+                            </button>
                         </div>
                     </div>
                 </header>
@@ -291,7 +335,9 @@ export default function VotingIndex({ voter, election, positions }: Props) {
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Department:</p>
-                                    <p className="font-medium text-gray-900 dark:text-white">{voter.course.department.name}</p>
+                                    <p className="font-medium text-gray-900 dark:text-white">{
+                                        departments.find(d => d.id === voter.department_id)?.department_name || voter.department_id
+                                    }</p>
                                 </div>
                                 <div>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">Year Level:</p>
@@ -301,15 +347,15 @@ export default function VotingIndex({ voter, election, positions }: Props) {
                         </div>
 
                         {/* Voting Sections */}
-                        {renderPositionSection('University Wide Positions', positions.university)}
-                        {renderPositionSection('Department Wide Positions', positions.department)}
-                        {renderPositionSection('Course Wide Positions', positions.course)}
-                        {renderPositionSection(`Year ${voter.year_level} Positions`, positions.year_level)}
+                        {positions.university.length > 0 && renderPositionSection('University Wide Positions', positions.university)}
+                        {positions.department.length > 0 && renderPositionSection('Department Wide Positions', positions.department)}
+                        {positions.course.length > 0 && renderPositionSection('Course Wide Positions', positions.course)}
+                        {positions.year_level.length > 0 && renderPositionSection(`Year ${voter.year_level} Positions`, positions.year_level)}
 
                         {/* Submit Button */}
                         <div className="mt-8 flex justify-end">
                             <button
-                                onClick={handleSubmit}
+                                onClick={() => setShowReceipt(true)}
                                 disabled={processing}
                                 className="rounded-md bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
                             >
@@ -326,6 +372,7 @@ export default function VotingIndex({ voter, election, positions }: Props) {
                     </div>
                 </main>
             </div>
+            {showReceipt && renderReceipt()}
         </>
     );
 }

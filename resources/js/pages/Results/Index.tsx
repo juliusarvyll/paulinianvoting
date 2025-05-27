@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { useAppearance } from '@/hooks/use-appearance';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
 interface Candidate {
@@ -11,6 +11,14 @@ interface Candidate {
         last_name: string;
         middle_name: string;
         name: string;
+        course?: {
+            department?: {
+                department_name: string;
+            };
+        };
+    };
+    department?: {
+        department_name: string;
     };
     votes_count: number;
     slogan: string;
@@ -50,6 +58,16 @@ export default function ResultsIndex({ election, positions: initialPositions, in
     const [loading, setLoading] = useState(false);
     const [lastUpdated, setLastUpdated] = useState(new Date());
     const [autoRefresh, setAutoRefresh] = useState(true);
+    const [selectedDepartment, setSelectedDepartment] = useState<string>('All');
+
+    // Memoize all department names for the filter
+    const allDepartments = useMemo(() => Array.from(
+        new Set(
+            positions.department.flatMap(position =>
+                position.candidates.map(candidate => candidate.department?.department_name || 'Unknown Department')
+            )
+        )
+    ).sort(), [positions.department]);
 
     const toggleTheme = () => {
         updateAppearance(appearance === 'dark' ? 'light' : 'dark');
@@ -89,11 +107,13 @@ export default function ResultsIndex({ election, positions: initialPositions, in
         return Math.round((votes / votersTurnout) * 100);
     };
 
-    const renderCandidateResults = (candidate: Candidate, position: Position) => {
-        const percentage = calculatePercentage(candidate.votes_count);
-
+    const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number) => {
+        const percentage = votersTurnout && votersTurnout > 0
+            ? Math.round((candidate.votes_count / votersTurnout) * 100)
+            : 0;
+        const isWinner = winnerIds ? winnerIds.includes(candidate.id) : false;
         return (
-            <div key={candidate.id} className="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div key={candidate.id} className={`mb-4 rounded-lg border ${isWinner ? 'border-indigo-500 dark:border-indigo-400' : 'border-gray-200 dark:border-gray-700'} bg-white p-4 shadow-sm dark:bg-gray-800`}>
                 <div className="flex items-start gap-4">
                     <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-full">
                         {candidate.photo_path ? (
@@ -136,6 +156,13 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                         </div>
                     </div>
                 </div>
+                {!isValidTurnout && minTurnout !== undefined && (
+                    <div className="mt-2 rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                        Result not official: Insufficient voter turnout.<br />
+                        This candidate has {candidate.votes_count} vote{candidate.votes_count !== 1 ? 's' : ''}.<br />
+                        At least {minTurnout} votes are needed for results to be valid.
+                    </div>
+                )}
             </div>
         );
     };
@@ -155,13 +182,84 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                         <div>
                             {position.candidates
                                 .sort((a, b) => b.votes_count - a.votes_count)
-                                .map((candidate) => renderCandidateResults(candidate, position))}
+                                .map((candidate) => renderCandidateResults(candidate, position, undefined, undefined, undefined, votersTurnout))}
                         </div>
                     </div>
                 ))}
             </div>
         </div>
     );
+
+    const renderDepartmentWinnersSection = (positionList: Position[]) => (
+        <div className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+            <h3 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">Department Wide Positions</h3>
+            {/* Department Filter UI */}
+            <div className="mb-4 flex flex-wrap gap-2 items-center">
+                <label className="font-medium mr-2">Filter by Department:</label>
+                <button
+                    className={`px-3 py-1 rounded ${selectedDepartment === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-200'}`}
+                    onClick={() => setSelectedDepartment('All')}
+                >
+                    All
+                </button>
+                {allDepartments.map(dept => (
+                    <button
+                        key={dept}
+                        className={`px-3 py-1 rounded ${selectedDepartment === dept ? 'bg-indigo-600 text-white' : 'bg-gray-200'}`}
+                        onClick={() => setSelectedDepartment(dept)}
+                    >
+                        {dept}
+                    </button>
+                ))}
+            </div>
+            <div className="space-y-8">
+                {positionList.map((position) => {
+                    // Group candidates by department
+                    const departmentGroups: Record<string, Candidate[]> = {};
+                    position.candidates.forEach(candidate => {
+                        const deptName = candidate.department?.department_name || 'Unknown Department';
+                        if (!departmentGroups[deptName]) departmentGroups[deptName] = [];
+                        departmentGroups[deptName].push(candidate);
+                    });
+
+                    return (
+                        <div key={position.id} className="space-y-4">
+                            <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
+                                {position.name}
+                                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                                    (Top {position.max_winners} per department)
+                                </span>
+                            </h4>
+                            {Object.entries(departmentGroups)
+                                .filter(([deptName]) => selectedDepartment === 'All' || deptName === selectedDepartment)
+                                .map(([deptName, candidates]) => {
+                                    const winnerIds = candidates
+                                        .slice()
+                                        .sort((a, b) => b.votes_count - a.votes_count)
+                                        .slice(0, position.max_winners)
+                                        .map(c => c.id);
+                                    const isValidTurnout = votersTurnout >= Math.floor(totalVoters / 2) + 1;
+                                    const minTurnout = Math.floor(totalVoters / 2) + 1;
+                                    return (
+                                        <div key={deptName} className="mb-4">
+                                            <h5 className="text-md font-semibold text-indigo-700 dark:text-indigo-300">{deptName}</h5>
+                                            <div>
+                                                {candidates
+                                                    .sort((a, b) => b.votes_count - a.votes_count)
+                                                    .map(candidate => renderCandidateResults(candidate, position, winnerIds, isValidTurnout, minTurnout, votersTurnout))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+
+    const minTurnout = Math.floor(totalVoters / 2) + 1;
+    const isValidTurnout = votersTurnout >= minTurnout;
 
     return (
         <>
@@ -263,10 +361,10 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                         </div>
 
                         {/* Results Sections */}
-                        {renderPositionSection('University Wide Positions', positions.university)}
-                        {renderPositionSection('Department Wide Positions', positions.department)}
-                        {renderPositionSection('Course Wide Positions', positions.course)}
-                        {renderPositionSection('Year Level Positions', positions.year_level)}
+                        {positions.university.length > 0 && renderPositionSection('University Wide Positions', positions.university)}
+                        {positions.department.length > 0 && renderDepartmentWinnersSection(positions.department)}
+                        {positions.course.length > 0 && renderPositionSection('Course Wide Positions', positions.course)}
+                        {positions.year_level.length > 0 && renderPositionSection('Year Level Positions', positions.year_level)}
                     </div>
                 </main>
             </div>
