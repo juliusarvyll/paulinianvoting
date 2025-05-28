@@ -35,6 +35,9 @@ class ResultsController extends Controller
         // Get voter statistics
         $totalVoters = Voter::count();
         $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
+        $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
+            ->groupBy('department_id')
+            ->pluck('count', 'department_id');
 
         return Inertia::render('Results/Index', [
             'election' => $election,
@@ -46,6 +49,7 @@ class ResultsController extends Controller
             ],
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,
+            'departmentVoterCounts' => $departmentVoterCounts,
         ]);
     }
 
@@ -132,6 +136,9 @@ class ResultsController extends Controller
         // Get voter statistics
         $totalVoters = Voter::count();
         $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
+        $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
+            ->groupBy('department_id')
+            ->pluck('count', 'department_id');
 
         return Inertia::render('Results/Public', [
             'election' => $election,
@@ -143,6 +150,7 @@ class ResultsController extends Controller
             ],
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,
+            'departmentVoterCounts' => $departmentVoterCounts,
         ]);
     }
 }

@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { useAppearance } from '@/hooks/use-appearance';
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
@@ -52,6 +52,7 @@ interface Props {
 
 export default function PublicResults({ election, positions: initialPositions, initialTotalVoters, initialVotersTurnout }: Props) {
     const { appearance, updateAppearance } = useAppearance();
+    const departmentVoterCounts = usePage().props.departmentVoterCounts || {};
     const [positions, setPositions] = useState(initialPositions);
     const [totalVoters, setTotalVoters] = useState(initialTotalVoters);
     const [votersTurnout, setVotersTurnout] = useState(initialVotersTurnout);
@@ -109,9 +110,20 @@ export default function PublicResults({ election, positions: initialPositions, i
     };
 
     const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number) => {
-        const percentage = votersTurnout && votersTurnout > 0
-            ? Math.round((candidate.votes_count / votersTurnout) * 100)
-            : 0;
+        let percentage = 0;
+        let deptTotal = 0;
+        let deptVotes = 0;
+
+        if (position.level === 'department') {
+            const deptId = (candidate as any).department_id || (candidate.department && ((candidate.department as any).id || (candidate.department as any).department_id));
+            deptTotal = departmentVoterCounts[deptId] || 0;
+            deptVotes = candidate.votes_count;
+            percentage = deptTotal > 0 ? Math.round((deptVotes / deptTotal) * 100) : 0;
+        } else {
+            percentage = votersTurnout && votersTurnout > 0
+                ? Math.round((candidate.votes_count / votersTurnout) * 100)
+                : 0;
+        }
         const isWinner = winnerIds ? winnerIds.includes(candidate.id) : false;
 
         return (
@@ -142,20 +154,28 @@ export default function PublicResults({ election, positions: initialPositions, i
                 </div>
 
                 <div className="p-4 flex-grow flex flex-col justify-end">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-base font-medium text-gray-700 dark:text-gray-300">
-                                    {candidate.votes_count} votes
-                                </span>
-                        <span className="text-base font-medium text-gray-700 dark:text-gray-300">
-                                    {percentage}%
-                                </span>
+                    <div className="flex flex-col space-y-2">
+                        {position.level === 'department' && (
+                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                                <div>Total Department Voters: {deptTotal}</div>
+                                <div>Votes Received: {deptVotes}</div>
                             </div>
-                    <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
-                                <div
+                        )}
+                        <div className="flex items-center justify-between">
+                            <span className="text-base font-medium text-gray-700 dark:text-gray-300">
+                                {candidate.votes_count} votes
+                            </span>
+                            <span className="text-base font-medium text-gray-700 dark:text-gray-300">
+                                {percentage}%
+                            </span>
+                        </div>
+                    </div>
+                    <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700 mt-2">
+                        <div
                             className={`h-2.5 rounded-full ${isWinner ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-gray-400 dark:bg-gray-500'}`}
-                                    style={{ width: `${percentage}%` }}
-                                ></div>
-                            </div>
+                            style={{ width: `${percentage}%` }}
+                        ></div>
+                    </div>
                 </div>
                 {!isValidTurnout && minTurnout !== undefined && (
                     <div className="mt-2 rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
@@ -240,6 +260,8 @@ export default function PublicResults({ election, positions: initialPositions, i
                             {Object.entries(departmentGroups)
                                 .filter(([deptName]) => selectedDepartment === 'All' || deptName === selectedDepartment)
                                 .map(([deptName, candidates]) => {
+                                    const deptId = (candidates[0] as any).department_id || (candidates[0].department && ((candidates[0].department as any).id || (candidates[0].department as any).department_id));
+                                    const totalVoters = deptId ? departmentVoterCounts[String(deptId)] ?? 0 : 0;
                                     const winnerIds = candidates
                                         .slice()
                                         .sort((a, b) => b.votes_count - a.votes_count)
@@ -247,7 +269,10 @@ export default function PublicResults({ election, positions: initialPositions, i
                                         .map(c => c.id);
                                     return (
                                         <div key={deptName} className="mb-4">
-                                            <h5 className="text-md font-semibold text-indigo-700 dark:text-indigo-300">{deptName}</h5>
+                                            <h5 className="text-md font-semibold text-indigo-700 dark:text-indigo-300">
+                                                {deptName}
+                                                <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Total Voters: {totalVoters})</span>
+                                            </h5>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                                 {candidates
                                                     .sort((a, b) => b.votes_count - a.votes_count)

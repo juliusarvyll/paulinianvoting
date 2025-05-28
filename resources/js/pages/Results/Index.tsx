@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { useAppearance } from '@/hooks/use-appearance';
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
@@ -52,6 +52,7 @@ interface Props {
 
 export default function ResultsIndex({ election, positions: initialPositions, initialTotalVoters, initialVotersTurnout }: Props) {
     const { appearance, updateAppearance } = useAppearance();
+    const departmentVoterCounts = usePage().props.departmentVoterCounts as Record<string, number> || {};
     const [positions, setPositions] = useState(initialPositions);
     const [totalVoters, setTotalVoters] = useState(initialTotalVoters);
     const [votersTurnout, setVotersTurnout] = useState(initialVotersTurnout);
@@ -108,9 +109,17 @@ export default function ResultsIndex({ election, positions: initialPositions, in
     };
 
     const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number) => {
-        const percentage = votersTurnout && votersTurnout > 0
-            ? Math.round((candidate.votes_count / votersTurnout) * 100)
-            : 0;
+        let percentage = 0;
+        if (position.level === 'department') {
+            // Try all possible department id sources
+            const deptId = (candidate as any).department_id || (candidate.department && ((candidate.department as any).id || (candidate.department as any).department_id));
+            const deptTotal = deptId ? departmentVoterCounts[String(deptId)] ?? 0 : 0;
+            percentage = deptTotal > 0 ? Math.round((candidate.votes_count / deptTotal) * 100) : 0;
+        } else {
+            percentage = votersTurnout && votersTurnout > 0
+                ? Math.round((candidate.votes_count / votersTurnout) * 100)
+                : 0;
+        }
         const isWinner = winnerIds ? winnerIds.includes(candidate.id) : false;
         return (
             <div key={candidate.id} className={`mb-4 rounded-lg border ${isWinner ? 'border-indigo-500 dark:border-indigo-400' : 'border-gray-200 dark:border-gray-700'} bg-white p-4 shadow-sm dark:bg-gray-800`}>
@@ -233,6 +242,8 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                             {Object.entries(departmentGroups)
                                 .filter(([deptName]) => selectedDepartment === 'All' || deptName === selectedDepartment)
                                 .map(([deptName, candidates]) => {
+                                    const deptId = (candidates[0] as any).department_id || (candidates[0].department && ((candidates[0].department as any).id || (candidates[0].department as any).department_id));
+                                    const totalVoters = deptId ? departmentVoterCounts[String(deptId)] ?? 0 : 0;
                                     const winnerIds = candidates
                                         .slice()
                                         .sort((a, b) => b.votes_count - a.votes_count)
@@ -242,7 +253,10 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                                     const minTurnout = Math.floor(totalVoters / 2) + 1;
                                     return (
                                         <div key={deptName} className="mb-4">
-                                            <h5 className="text-md font-semibold text-indigo-700 dark:text-indigo-300">{deptName}</h5>
+                                            <h5 className="text-md font-semibold text-indigo-700 dark:text-indigo-300">
+                                                {deptName}
+                                                <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Total Voters: {totalVoters})</span>
+                                            </h5>
                                             <div>
                                                 {candidates
                                                     .sort((a, b) => b.votes_count - a.votes_count)
