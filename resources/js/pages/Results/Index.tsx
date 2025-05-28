@@ -3,6 +3,14 @@ import { useAppearance } from '@/hooks/use-appearance';
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
+interface DepartmentVotes {
+    [departmentId: string]: {
+        votes: number;
+        totalVoters: number;
+        departmentName: string;
+    };
+}
+
 interface Candidate {
     id: number;
     voter: {
@@ -23,6 +31,7 @@ interface Candidate {
     votes_count: number;
     slogan: string;
     photo_path: string | null;
+    department_votes?: DepartmentVotes;
 }
 
 interface Position {
@@ -77,7 +86,7 @@ export default function ResultsIndex({ election, positions: initialPositions, in
     const refreshResults = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(route('results.data'));
+            const response = await axios.get(route('results.data', { include_department_votes: true }));
             setPositions(response.data.positions);
             setTotalVoters(response.data.totalVoters);
             setVotersTurnout(response.data.votersTurnout);
@@ -121,8 +130,9 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                 : 0;
         }
         const isWinner = winnerIds ? winnerIds.includes(candidate.id) : false;
+
         return (
-            <div key={candidate.id} className={`mb-4 rounded-lg border ${isWinner ? 'border-indigo-500 dark:border-indigo-400' : 'border-gray-200 dark:border-gray-700'} bg-white p-4 shadow-sm dark:bg-gray-800`}>
+            <div key={candidate.id} className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white p-4 shadow-sm dark:bg-gray-800">
                 <div className="flex items-start gap-4">
                     <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-full">
                         {candidate.photo_path ? (
@@ -163,6 +173,38 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                                 ></div>
                             </div>
                         </div>
+
+                        {position.level === 'university' && candidate.department_votes && (
+                            <div className="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+                                <h5 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                                    Votes by Department
+                                </h5>
+                                <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
+                                    {Object.entries(candidate.department_votes)
+                                        .sort(([, a], [, b]) => a.departmentName.localeCompare(b.departmentName))
+                                        .map(([deptId, data]) => {
+                                            const percentage = data.totalVoters > 0 ? (data.votes / data.totalVoters) * 100 : 0;
+
+                                            return (
+                                                <div key={deptId}>
+                                                    <div className="flex justify-between text-xs mb-1">
+                                                        <span className="font-medium text-gray-700 dark:text-gray-300">{data.departmentName}</span>
+                                                        <span className="text-gray-600 dark:text-gray-400">
+                                                            {data.votes} of {data.totalVoters} ({Math.round(percentage)}%)
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-700">
+                                                        <div
+                                                            className={`h-1 rounded-full ${percentage > 50 ? 'bg-green-500 dark:bg-green-400' : 'bg-blue-500 dark:bg-blue-400'}`}
+                                                            style={{ width: `${percentage}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
                 {!isValidTurnout && minTurnout !== undefined && (

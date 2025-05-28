@@ -98,6 +98,47 @@ class ResultsController extends Controller
             ])
             ->get();
 
+        // For university-level positions, attach department vote counts
+        if ($level === 'university') {
+            $positions->transform(function ($position) {
+                $position->candidates->transform(function ($candidate) {
+                    // Get votes grouped by department for this candidate
+                    $departmentVotes = Vote::where('candidate_id', $candidate->id)
+                        ->join('voters', 'votes.voter_id', '=', 'voters.id')
+                        ->join('courses', 'voters.course_id', '=', 'courses.id')
+                        ->join('departments', 'courses.department_id', '=', 'departments.id')
+                        ->select(
+                            'departments.id as department_id',
+                            'departments.department_name',
+                            DB::raw('count(*) as votes')
+                        )
+                        ->groupBy('departments.id', 'departments.department_name')
+                        ->get();
+
+                    // Get total voters per department
+                    $departmentTotals = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
+                        ->join('departments', 'courses.department_id', '=', 'departments.id')
+                        ->select('departments.id', DB::raw('count(*) as total_voters'))
+                        ->groupBy('departments.id')
+                        ->pluck('total_voters', 'departments.id');
+
+                    // Format the department votes
+                    $formattedDepartmentVotes = [];
+                    foreach ($departmentVotes as $deptVote) {
+                        $formattedDepartmentVotes[$deptVote->department_id] = [
+                            'votes' => $deptVote->votes,
+                            'totalVoters' => $departmentTotals[$deptVote->department_id] ?? 0,
+                            'departmentName' => $deptVote->department_name
+                        ];
+                    }
+
+                    $candidate->department_votes = $formattedDepartmentVotes;
+                    return $candidate;
+                });
+                return $position;
+            });
+        }
+
         // For department-level positions, attach department directly to each candidate
         if ($level === 'department') {
             $positions->transform(function ($position) {
