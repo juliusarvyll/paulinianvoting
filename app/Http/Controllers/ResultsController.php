@@ -100,35 +100,40 @@ class ResultsController extends Controller
 
         // For university-level positions, attach department vote counts
         if ($level === 'university') {
-            $positions->transform(function ($position) {
-                $position->candidates->transform(function ($candidate) {
+            // First, get all departments to ensure we include departments with zero votes
+            $allDepartments = DB::table('departments')->get();
+
+            $positions->transform(function ($position) use ($allDepartments) {
+                $position->candidates->transform(function ($candidate) use ($allDepartments) {
                     // Get votes grouped by department for this candidate
-                    $departmentVotes = Vote::where('candidate_id', $candidate->id)
-                        ->join('voters', 'votes.voter_id', '=', 'voters.id')
-                        ->join('courses', 'voters.course_id', '=', 'courses.id')
-                        ->join('departments', 'courses.department_id', '=', 'departments.id')
+                    $departmentVotes = Vote::where('votes.candidate_id', $candidate->id)
+                        ->rightJoin('voters', 'votes.voter_id', '=', 'voters.id')
+                        ->rightJoin('courses', 'voters.course_id', '=', 'courses.id')
+                        ->rightJoin('departments', 'courses.department_id', '=', 'departments.id')
                         ->select(
                             'departments.id as department_id',
                             'departments.department_name',
-                            DB::raw('count(*) as votes')
+                            DB::raw('COUNT(votes.id) as votes')
                         )
                         ->groupBy('departments.id', 'departments.department_name')
-                        ->get();
+                        ->get()
+                        ->keyBy('department_id');
 
                     // Get total voters per department
                     $departmentTotals = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
                         ->join('departments', 'courses.department_id', '=', 'departments.id')
                         ->select('departments.id', DB::raw('count(*) as total_voters'))
                         ->groupBy('departments.id')
-                        ->pluck('total_voters', 'departments.id');
+                        ->pluck('total_voters', 'id');
 
-                    // Format the department votes
+                    // Format the department votes, ensuring all departments are included
                     $formattedDepartmentVotes = [];
-                    foreach ($departmentVotes as $deptVote) {
-                        $formattedDepartmentVotes[$deptVote->department_id] = [
-                            'votes' => $deptVote->votes,
-                            'totalVoters' => $departmentTotals[$deptVote->department_id] ?? 0,
-                            'departmentName' => $deptVote->department_name
+                    foreach ($allDepartments as $dept) {
+                        $deptVote = $departmentVotes->get($dept->id);
+                        $formattedDepartmentVotes[$dept->id] = [
+                            'votes' => $deptVote ? $deptVote->votes : 0,
+                            'totalVoters' => $departmentTotals[$dept->id] ?? 0,
+                            'departmentName' => $dept->department_name
                         ];
                     }
 

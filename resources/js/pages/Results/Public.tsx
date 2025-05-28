@@ -118,7 +118,7 @@ export default function PublicResults({ election, positions: initialPositions, i
         return Math.round((votes / votersTurnout) * 100);
     };
 
-    const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number, departmentVotes?: { [key: string]: { votes: number, candidates: { [key: number]: number } } }) => {
+    const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number) => {
         let percentage = 0;
         let deptTotal = 0;
         let deptVotes = 0;
@@ -185,24 +185,23 @@ export default function PublicResults({ election, positions: initialPositions, i
                             ></div>
                         </div>
 
-                        {position.level === 'university' && departmentVotes && (
+                        {position.level === 'university' && candidate.department_votes && (
                             <div className="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
                                 <h5 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
                                     Votes by Department
                                 </h5>
                                 <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
-                                    {Object.entries(departmentVotes)
-                                        .sort(([deptA], [deptB]) => deptA.localeCompare(deptB))
-                                        .map(([department, data]) => {
-                                            const candidateVotes = data.candidates[candidate.id] || 0;
-                                            const percentage = data.votes > 0 ? (candidateVotes / data.votes) * 100 : 0;
+                                    {Object.entries(candidate.department_votes)
+                                        .sort(([, a], [, b]) => a.departmentName.localeCompare(b.departmentName))
+                                        .map(([deptId, data]) => {
+                                            const percentage = data.totalVoters > 0 ? (data.votes / data.totalVoters) * 100 : 0;
 
                                             return (
-                                                <div key={department}>
+                                                <div key={deptId}>
                                                     <div className="flex justify-between text-xs mb-1">
-                                                        <span className="font-medium text-gray-700 dark:text-gray-300">{department}</span>
+                                                        <span className="font-medium text-gray-700 dark:text-gray-300">{data.departmentName}</span>
                                                         <span className="text-gray-600 dark:text-gray-400">
-                                                            {candidateVotes} of {data.votes} ({Math.round(percentage)}%)
+                                                            {data.votes} of {data.totalVoters} ({Math.round(percentage)}%)
                                                         </span>
                                                     </div>
                                                     <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-700">
@@ -273,8 +272,7 @@ export default function PublicResults({ election, positions: initialPositions, i
                                                     undefined,
                                                     undefined,
                                                     undefined,
-                                                    votersTurnout,
-                                                    title.toLowerCase().includes('university') ? departmentVotes : undefined
+                                                    votersTurnout
                                                 )}
                                             </div>
                                         ))}
