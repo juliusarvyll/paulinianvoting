@@ -3,6 +3,14 @@ import { useAppearance } from '@/hooks/use-appearance';
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
+interface DepartmentVotes {
+    [departmentId: string]: {
+        votes: number;
+        totalVoters: number;
+        departmentName: string;
+    };
+}
+
 interface Candidate {
     id: number;
     voter: {
@@ -23,6 +31,7 @@ interface Candidate {
     votes_count: number;
     slogan: string;
     photo_path: string | null;
+    department_votes?: DepartmentVotes;
 }
 
 interface Position {
@@ -78,7 +87,7 @@ export default function PublicResults({ election, positions: initialPositions, i
     const refreshResults = async () => {
         try {
             setLoading(true);
-            const response = await axios.get(route('results.data'));
+            const response = await axios.get(route('results.data', { include_department_votes: true }));
             setPositions(response.data.positions);
             setTotalVoters(response.data.totalVoters);
             setVotersTurnout(response.data.votersTurnout);
@@ -109,7 +118,7 @@ export default function PublicResults({ election, positions: initialPositions, i
         return Math.round((votes / votersTurnout) * 100);
     };
 
-    const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number) => {
+    const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number, departmentVotes?: { [key: string]: { votes: number, candidates: { [key: number]: number } } }) => {
         let percentage = 0;
         let deptTotal = 0;
         let deptVotes = 0;
@@ -127,12 +136,12 @@ export default function PublicResults({ election, positions: initialPositions, i
         const isWinner = winnerIds ? winnerIds.includes(candidate.id) : false;
 
         return (
-            <div key={candidate.id} className={`flex flex-col h-full rounded-lg border ${isWinner ? 'border-indigo-300 dark:border-indigo-700' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 shadow-sm overflow-hidden`}>
+            <div className={`flex flex-col h-full rounded-lg border ${isWinner ? 'border-indigo-300 dark:border-indigo-700' : 'border-gray-200 dark:border-gray-700'} bg-white dark:bg-gray-800 shadow-sm overflow-hidden`}>
                 <div className={`${isWinner ? 'bg-indigo-100 dark:bg-indigo-900/30' : ''} p-4 text-center`}>
                     <div className="mx-auto h-32 w-32 mb-4 overflow-hidden rounded-full border-4 border-white dark:border-gray-700 shadow">
                         {candidate.photo_path ? (
                             <img
-                                src={candidate.photo_path}
+                                src={`/storage/${candidate.photo_path}`}
                                 alt={candidate.voter.name}
                                 className="h-full w-full object-cover"
                             />
@@ -146,14 +155,14 @@ export default function PublicResults({ election, positions: initialPositions, i
                         )}
                     </div>
                     <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-1">
-                            {candidate.voter.name}
-                        </h4>
-                        {candidate.slogan && (
+                        {candidate.voter.name}
+                    </h4>
+                    {candidate.slogan && (
                         <p className="text-sm text-gray-600 dark:text-gray-300 italic">"{candidate.slogan}"</p>
-                        )}
+                    )}
                 </div>
 
-                <div className="p-4 flex-grow flex flex-col justify-end">
+                <div className="p-4 flex-grow flex flex-col">
                     <div className="flex flex-col space-y-2">
                         {position.level === 'department' && (
                             <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -161,20 +170,53 @@ export default function PublicResults({ election, positions: initialPositions, i
                                 <div>Votes Received: {deptVotes}</div>
                             </div>
                         )}
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-2">
                             <span className="text-base font-medium text-gray-700 dark:text-gray-300">
-                                {candidate.votes_count} votes
+                                Total Votes: {candidate.votes_count}
                             </span>
                             <span className="text-base font-medium text-gray-700 dark:text-gray-300">
                                 {percentage}%
                             </span>
                         </div>
-                    </div>
-                    <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700 mt-2">
-                        <div
-                            className={`h-2.5 rounded-full ${isWinner ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-gray-400 dark:bg-gray-500'}`}
-                            style={{ width: `${percentage}%` }}
-                        ></div>
+                        <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                            <div
+                                className={`h-2.5 rounded-full ${isWinner ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-gray-400 dark:bg-gray-500'}`}
+                                style={{ width: `${percentage}%` }}
+                            ></div>
+                        </div>
+
+                        {position.level === 'university' && departmentVotes && (
+                            <div className="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+                                <h5 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                                    Votes by Department
+                                </h5>
+                                <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
+                                    {Object.entries(departmentVotes)
+                                        .sort(([deptA], [deptB]) => deptA.localeCompare(deptB))
+                                        .map(([department, data]) => {
+                                            const candidateVotes = data.candidates[candidate.id] || 0;
+                                            const percentage = data.votes > 0 ? (candidateVotes / data.votes) * 100 : 0;
+
+                                            return (
+                                                <div key={department}>
+                                                    <div className="flex justify-between text-xs mb-1">
+                                                        <span className="font-medium text-gray-700 dark:text-gray-300">{department}</span>
+                                                        <span className="text-gray-600 dark:text-gray-400">
+                                                            {candidateVotes} of {data.votes} ({Math.round(percentage)}%)
+                                                        </span>
+                                                    </div>
+                                                    <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-700">
+                                                        <div
+                                                            className={`h-1 rounded-full ${percentage > 50 ? 'bg-green-500 dark:bg-green-400' : 'bg-blue-500 dark:bg-blue-400'}`}
+                                                            style={{ width: `${percentage}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
                 {!isValidTurnout && minTurnout !== undefined && (
@@ -197,21 +239,49 @@ export default function PublicResults({ election, positions: initialPositions, i
             <div className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
                 <h3 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
                 <div className="space-y-8">
-                    {positionList.map((position) => (
-                        <div key={position.id} className="space-y-4">
-                            <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
-                                {position.name}
-                                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                                    (Top {position.max_winners})
-                                </span>
-                            </h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {position.candidates
-                                    .sort((a, b) => b.votes_count - a.votes_count)
-                                    .map((candidate) => renderCandidateResults(candidate, position, undefined, undefined, undefined, votersTurnout))}
+                    {positionList.map((position) => {
+                        // Group candidates by department for university positions
+                        const departmentVotes: { [key: string]: { votes: number, candidates: { [key: number]: number } } } = {};
+
+                        if (title.toLowerCase().includes('university')) {
+                            position.candidates.forEach(candidate => {
+                                const voterDepartment = candidate.voter.course?.department?.department_name || 'Unknown Department';
+                                if (!departmentVotes[voterDepartment]) {
+                                    departmentVotes[voterDepartment] = { votes: 0, candidates: {} };
+                                }
+                                departmentVotes[voterDepartment].candidates[candidate.id] = (departmentVotes[voterDepartment].candidates[candidate.id] || 0) + 1;
+                                departmentVotes[voterDepartment].votes++;
+                            });
+                        }
+
+                        return (
+                            <div key={position.id} className="space-y-4">
+                                <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
+                                    {position.name}
+                                    <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                                        (Top {position.max_winners})
+                                    </span>
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {position.candidates
+                                        .sort((a, b) => b.votes_count - a.votes_count)
+                                        .map((candidate) => (
+                                            <div key={candidate.id}>
+                                                {renderCandidateResults(
+                                                    candidate,
+                                                    position,
+                                                    undefined,
+                                                    undefined,
+                                                    undefined,
+                                                    votersTurnout,
+                                                    title.toLowerCase().includes('university') ? departmentVotes : undefined
+                                                )}
+                                            </div>
+                                        ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         );

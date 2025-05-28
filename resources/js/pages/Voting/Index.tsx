@@ -146,7 +146,7 @@ export default function VotingIndex({ voter, election, positions, departments = 
                 <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-full">
                     {candidate.photo_path ? (
                         <img
-                            src={candidate.photo_path}
+                            src={`/storage/${candidate.photo_path}`}
                             alt={`${candidate.voter.first_name} ${candidate.voter.last_name}`}
                             className="h-full w-full object-cover"
                         />

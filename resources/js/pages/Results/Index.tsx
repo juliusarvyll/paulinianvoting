@@ -127,7 +127,7 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                     <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-full">
                         {candidate.photo_path ? (
                             <img
-                                src={candidate.photo_path}
+                                src={`/storage/${candidate.photo_path}`}
                                 alt={candidate.voter.name}
                                 className="h-full w-full object-cover"
                             />
@@ -180,21 +180,115 @@ export default function ResultsIndex({ election, positions: initialPositions, in
         <div className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
             <h3 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
             <div className="space-y-8">
-                {positionList.map((position) => (
-                    <div key={position.id} className="space-y-4">
-                        <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
-                            {position.name}
-                            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                                (Top {position.max_winners})
-                            </span>
-                        </h4>
-                        <div>
-                            {position.candidates
-                                .sort((a, b) => b.votes_count - a.votes_count)
-                                .map((candidate) => renderCandidateResults(candidate, position, undefined, undefined, undefined, votersTurnout))}
+                {positionList.map((position) => {
+                    // Group candidates by department for university positions
+                    const departmentVotes: { [key: string]: { votes: number, candidates: { [key: number]: number } } } = {};
+
+                    if (title.toLowerCase().includes('university')) {
+                        position.candidates.forEach(candidate => {
+                            const voterDepartment = candidate.voter.course?.department?.department_name || 'Unknown Department';
+                            if (!departmentVotes[voterDepartment]) {
+                                departmentVotes[voterDepartment] = { votes: 0, candidates: {} };
+                            }
+                            departmentVotes[voterDepartment].candidates[candidate.id] = (departmentVotes[voterDepartment].candidates[candidate.id] || 0) + 1;
+                            departmentVotes[voterDepartment].votes++;
+                        });
+                    }
+
+                    return (
+                        <div key={position.id} className="space-y-4">
+                            <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
+                                {position.name}
+                                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                                    (Top {position.max_winners})
+                                </span>
+                            </h4>
+                            <div>
+                                {position.candidates
+                                    .sort((a, b) => b.votes_count - a.votes_count)
+                                    .map((candidate) => (
+                                        <div key={candidate.id} className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white p-4 shadow-sm dark:bg-gray-800">
+                                            <div className="flex items-start gap-4">
+                                                <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-full">
+                                                    {candidate.photo_path ? (
+                                                        <img
+                                                            src={candidate.photo_path}
+                                                            alt={candidate.voter.name}
+                                                            className="h-full w-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-full w-full items-center justify-center bg-gray-200 dark:bg-gray-700">
+                                                            <span className="text-2xl font-bold text-gray-500 dark:text-gray-400">
+                                                                {candidate.voter.first_name[0]}
+                                                                {candidate.voter.last_name[0]}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h4 className="font-medium text-gray-900 dark:text-white">
+                                                        {candidate.voter.name}
+                                                    </h4>
+                                                    {candidate.slogan && (
+                                                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{candidate.slogan}</p>
+                                                    )}
+                                                    <div className="mt-3">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                                {candidate.votes_count} votes
+                                                            </span>
+                                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                                {calculatePercentage(candidate.votes_count)}%
+                                                            </span>
+                                                        </div>
+                                                        <div className="mt-1 h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                                                            <div
+                                                                className="h-2.5 rounded-full bg-indigo-600 dark:bg-indigo-500"
+                                                                style={{ width: `${calculatePercentage(candidate.votes_count)}%` }}
+                                                            ></div>
+                                                        </div>
+                                                    </div>
+
+                                                    {title.toLowerCase().includes('university') && (
+                                                        <div className="mt-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+                                                            <h5 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                                                                Votes by Department
+                                                            </h5>
+                                                            <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
+                                                                {Object.entries(departmentVotes)
+                                                                    .sort(([deptA], [deptB]) => deptA.localeCompare(deptB))
+                                                                    .map(([department, data]) => {
+                                                                        const candidateVotes = data.candidates[candidate.id] || 0;
+                                                                        const percentage = data.votes > 0 ? (candidateVotes / data.votes) * 100 : 0;
+
+                                                                        return (
+                                                                            <div key={department}>
+                                                                                <div className="flex justify-between text-xs mb-1">
+                                                                                    <span className="font-medium text-gray-700 dark:text-gray-300">{department}</span>
+                                                                                    <span className="text-gray-600 dark:text-gray-400">
+                                                                                        {candidateVotes} of {data.votes} ({Math.round(percentage)}%)
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="h-1 w-full rounded-full bg-gray-100 dark:bg-gray-700">
+                                                                                    <div
+                                                                                        className={`h-1 rounded-full ${percentage > 50 ? 'bg-green-500 dark:bg-green-400' : 'bg-blue-500 dark:bg-blue-400'}`}
+                                                                                        style={{ width: `${percentage}%` }}
+                                                                                    ></div>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

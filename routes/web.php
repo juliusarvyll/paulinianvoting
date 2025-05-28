@@ -28,9 +28,9 @@ Route::middleware(['voter'])->group(function () {
 Route::post('/voter/logout', [VoterController::class, 'logout'])->name('voter.logout');
 
 // Election Results Routes
-Route::get('/results', [ResultsController::class, 'index'])->name('results');
+Route::get('/resultszxc', [ResultsController::class, 'index'])->name('results');
 Route::get('/results/data', [ResultsController::class, 'data'])->name('results.data');
-Route::get('/live-results', [ResultsController::class, 'public'])->name('results.public');
+Route::get('/live-resultszxc', [ResultsController::class, 'public'])->name('results.public');
 
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
