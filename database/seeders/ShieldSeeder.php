@@ -11,11 +11,11 @@ class ShieldSeeder extends Seeder
 {
     public function run(): void
     {
-        // Create Super Admin role
-        $superAdmin = Role::create(['name' => 'super_admin']);
+        // Create Super Admin role if it doesn't exist
+        $superAdmin = Role::firstOrCreate(['name' => 'super_admin']);
 
-        // Create Admin role
-        $admin = Role::create(['name' => 'admin']);
+        // Create Admin role if it doesn't exist
+        $admin = Role::firstOrCreate(['name' => 'admin']);
 
         // Create basic permissions
         $permissions = [
@@ -26,20 +26,25 @@ class ShieldSeeder extends Seeder
             'update_user',
             'delete_user',
             'delete_any_user',
+            'page_VoteSeeder',
+            'page_VoteManager',
         ];
 
+        // Create permissions if they don't exist
         foreach ($permissions as $permission) {
-            Permission::create(['name' => $permission]);
+            Permission::firstOrCreate(['name' => $permission]);
         }
 
         // Assign all permissions to super_admin
-        $superAdmin->givePermissionTo(Permission::all());
+        $superAdmin->syncPermissions(Permission::all());
 
         // Assign basic permissions to admin
-        $admin->givePermissionTo([
+        $admin->syncPermissions([
             'view_dashboard',
             'view_any_user',
             'view_user',
+            'page_VoteSeeder',
+            'page_VoteManager',
         ]);
 
         // Create a super admin user if it doesn't exist
