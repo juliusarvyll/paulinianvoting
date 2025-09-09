@@ -228,6 +228,13 @@ export default function VotingIndex({ voter, election, positions, departments = 
             <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-lg w-full shadow-lg">
                 <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Vote Receipt</h2>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {Object.keys(selectedCandidates).length === 0 && (
+                        <div className="rounded-md bg-yellow-50 p-4 dark:bg-yellow-900/30">
+                            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                You have not selected any candidates. Submitting will record no votes for any position.
+                            </p>
+                        </div>
+                    )}
                     {Object.entries(selectedCandidates).map(([positionId, candidateIds]) => {
                         const position = Object.values(positions).flat().find(p => p.id === Number(positionId));
                         if (!position) return null;
@@ -359,7 +366,11 @@ export default function VotingIndex({ voter, election, positions, departments = 
                                 disabled={processing}
                                 className="rounded-md bg-indigo-600 px-6 py-3 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
                             >
-                                {processing ? 'Submitting...' : 'Submit Vote'}
+                                {processing
+                                    ? 'Submitting...'
+                                    : Object.keys(selectedCandidates).length === 0
+                                        ? 'Submit Blank Ballot'
+                                        : 'Submit Vote'}
                             </button>
                         </div>
 

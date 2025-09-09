@@ -30,8 +30,14 @@ class DepartmentResource extends Resource
                 Forms\Components\TextInput::make('department_name')
                     ->required()
                     ->maxLength(255),
-                Forms\Components\TextInput::make('code')
-                    ->maxLength(255),
+                Forms\Components\FileUpload::make('logo_path')
+                    ->label('Logo')
+                    ->image()
+                    ->directory('department-logos')
+                    ->maxSize(1024)
+                    ->imagePreviewHeight('100')
+                    ->columnSpanFull()
+                    ->nullable(),
             ]);
     }
 
@@ -39,13 +45,16 @@ class DepartmentResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\ImageColumn::make('logo_path')
+                    ->label('Logo')
+                    ->height(40)
+                    ->width(40),
                 Tables\Columns\TextColumn::make('department_name')
-                    ->searchable(),
-                Tables\Columns\TextColumn::make('code')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('courses_count')
                     ->counts('courses')
-                    ->label('Courses'),
+                    ->label('Courses')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()

@@ -9,6 +9,7 @@ class Department extends Model
 {
     protected $fillable = [
         'department_name',
+        'logo_path',
     ];
 
     public function courses(): HasMany
@@ -19,5 +20,10 @@ class Department extends Model
     public function candidates(): HasMany
     {
         return $this->hasMany(Candidate::class);
+    }
+
+    public function getLogoPathAttribute($value)
+    {
+        return $value ? asset('storage/' . $value) : null;
     }
 }

@@ -11,6 +11,7 @@ class Candidate extends Model
     protected $fillable = [
         'voter_id',
         'position_id',
+        'election_id',
         'course_id',
         'department_id',
         'slogan',
@@ -40,5 +41,10 @@ class Candidate extends Model
     public function votes(): HasMany
     {
         return $this->hasMany(Vote::class);
+    }
+    
+    public function election(): BelongsTo
+    {
+        return $this->belongsTo(Election::class);
     }
 }

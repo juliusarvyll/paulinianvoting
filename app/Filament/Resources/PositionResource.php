@@ -27,6 +27,11 @@ class PositionResource extends Resource
     {
         return $form
             ->schema([
+                Forms\Components\Select::make('election_id')
+                    ->relationship('election', 'name')
+                    ->required()
+                    ->searchable()
+                    ->preload(),
                 Forms\Components\TextInput::make('name')
                     ->required()
                     ->maxLength(255),
@@ -50,6 +55,10 @@ class PositionResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('election.name')
+                    ->label('Election')
+                    ->sortable()
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('name')
                     ->searchable(),
                 Tables\Columns\TextColumn::make('max_winners')
@@ -70,6 +79,10 @@ class PositionResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('election')
+                    ->relationship('election', 'name')
+                    ->searchable()
+                    ->preload(),
                 Tables\Filters\SelectFilter::make('level')
                     ->options([
                         'university' => 'University',

@@ -249,16 +249,16 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                     }
 
                     return (
-                        <div key={position.id} className="space-y-4">
-                            <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
-                                {position.name}
-                                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                                    (Top {position.max_winners})
-                                </span>
-                            </h4>
-                            <div>
-                                {position.candidates
-                                    .sort((a, b) => b.votes_count - a.votes_count)
+                    <div key={position.id} className="space-y-4">
+                        <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
+                            {position.name}
+                            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                                (Top {position.max_winners})
+                            </span>
+                        </h4>
+                        <div>
+                            {position.candidates
+                                .sort((a, b) => b.votes_count - a.votes_count)
                                     .map((candidate) => (
                                         <div key={candidate.id} className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white p-4 shadow-sm dark:bg-gray-800">
                                             <div className="flex items-start gap-4">
@@ -335,9 +335,9 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                                                         </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                        </div>
-                                    ))}
+                        </div>
+                    </div>
+                ))}
                             </div>
                         </div>
                     );

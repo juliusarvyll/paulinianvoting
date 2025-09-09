@@ -7,6 +7,7 @@ use App\Models\Position;
 use App\Models\Voter;
 use App\Models\Vote;
 use App\Models\Candidate;
+use App\Models\VoterElectionParticipation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -19,22 +20,24 @@ class ResultsController extends Controller
     public function index()
     {
         // Get active election
-        $election = Election::where('is_active', true)->first();
+        $election = Election::active()->first();
 
         if (!$election) {
             return redirect()->route('welcome')
                 ->with('error', 'No active election at the moment.');
         }
 
-        // Get positions and candidates with vote counts
-        $universityPositions = $this->getPositionsWithCandidates('university');
-        $departmentPositions = $this->getPositionsWithCandidates('department');
-        $coursePositions = $this->getPositionsWithCandidates('course');
-        $yearLevelPositions = $this->getPositionsWithCandidates('year_level');
+        // Get positions and candidates with vote counts (scoped to active election)
+        $universityPositions = $this->getPositionsWithCandidates('university', $election->id);
+        $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
+        $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
+        $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
 
-        // Get voter statistics
+        // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
-        $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
+        $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
+            ->distinct('voter_id')
+            ->count('voter_id');
         $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
             ->groupBy('department_id')
             ->pluck('count', 'department_id');
@@ -58,15 +61,20 @@ class ResultsController extends Controller
      */
     public function data()
     {
-        // Get positions and candidates with vote counts
-        $universityPositions = $this->getPositionsWithCandidates('university');
-        $departmentPositions = $this->getPositionsWithCandidates('department');
-        $coursePositions = $this->getPositionsWithCandidates('course');
-        $yearLevelPositions = $this->getPositionsWithCandidates('year_level');
+        // Get active election
+        $election = Election::active()->first();
 
-        // Get voter statistics
+        // Get positions and candidates with vote counts (scoped to active election)
+        $universityPositions = $this->getPositionsWithCandidates('university', $election->id);
+        $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
+        $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
+        $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
+
+        // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
-        $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
+        $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
+            ->distinct('voter_id')
+            ->count('voter_id');
 
         return response()->json([
             'positions' => [
@@ -83,12 +91,17 @@ class ResultsController extends Controller
     /**
      * Get positions with candidates and vote counts for a specific level.
      */
-    private function getPositionsWithCandidates($level)
+    private function getPositionsWithCandidates($level, $electionId)
     {
         $positions = Position::where('level', $level)
+            ->where('election_id', $electionId)
             ->with([
-                'candidates' => function ($query) {
-                    $query->withCount('votes')
+                'candidates' => function ($query) use ($electionId) {
+                    $query->withCount([
+                        'votes as votes_count' => function ($q) use ($electionId) {
+                            $q->where('election_id', $electionId);
+                        },
+                    ])
                         ->with([
                             'voter:id,first_name,last_name,middle_name,course_id',
                             'department',
@@ -103,10 +116,11 @@ class ResultsController extends Controller
             // First, get all departments to ensure we include departments with zero votes
             $allDepartments = DB::table('departments')->get();
 
-            $positions->transform(function ($position) use ($allDepartments) {
-                $position->candidates->transform(function ($candidate) use ($allDepartments) {
+            $positions->transform(function ($position) use ($allDepartments, $electionId) {
+                $position->candidates->transform(function ($candidate) use ($allDepartments, $electionId) {
                     // Get votes grouped by department for this candidate
                     $departmentVotes = Vote::where('votes.candidate_id', $candidate->id)
+                        ->where('votes.election_id', $electionId)
                         ->rightJoin('voters', 'votes.voter_id', '=', 'voters.id')
                         ->rightJoin('courses', 'voters.course_id', '=', 'courses.id')
                         ->rightJoin('departments', 'courses.department_id', '=', 'departments.id')
@@ -166,22 +180,24 @@ class ResultsController extends Controller
     public function public()
     {
         // Get active election
-        $election = Election::where('is_active', true)->first();
+        $election = Election::active()->first();
 
         if (!$election) {
             return redirect()->route('welcome')
                 ->with('error', 'No active election at the moment.');
         }
 
-        // Get positions and candidates with vote counts
-        $universityPositions = $this->getPositionsWithCandidates('university');
-        $departmentPositions = $this->getPositionsWithCandidates('department');
-        $coursePositions = $this->getPositionsWithCandidates('course');
-        $yearLevelPositions = $this->getPositionsWithCandidates('year_level');
+        // Get positions and candidates with vote counts (scoped to active election)
+        $universityPositions = $this->getPositionsWithCandidates('university', $election->id);
+        $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
+        $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
+        $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
 
-        // Get voter statistics
+        // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
-        $votersTurnout = \App\Models\Vote::distinct('voter_id')->count('voter_id');
+        $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
+            ->distinct('voter_id')
+            ->count('voter_id');
         $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
             ->groupBy('department_id')
             ->pluck('count', 'department_id');

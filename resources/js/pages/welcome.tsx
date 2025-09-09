@@ -42,6 +42,21 @@ export default function Welcome() {
                 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500&display=swap" rel="stylesheet" />
             </Head>
             <div className="flex min-h-screen flex-col items-center bg-[#FDFDFC] p-6 text-[#1b1b18] lg:justify-center lg:p-8 dark:bg-[#0a0a0a]">
+                {/* Flash banners */}
+                {(flash?.success || flash?.error) && (
+                    <div className="fixed top-0 left-0 right-0 z-50 px-4 py-3">
+                        {flash.success && (
+                            <div className="mx-auto max-w-3xl rounded-md border border-green-200 bg-green-50 p-3 text-green-800 shadow dark:border-green-800 dark:bg-green-900 dark:text-green-100">
+                                {flash.success}
+                            </div>
+                        )}
+                        {flash.error && (
+                            <div className="mx-auto max-w-3xl rounded-md border border-red-200 bg-red-50 p-3 text-red-800 shadow dark:border-red-800 dark:bg-red-900 dark:text-red-100">
+                                {flash.error}
+                            </div>
+                        )}
+                    </div>
+                )}
                 <header className="mb-6 w-full max-w-[335px] text-sm lg:max-w-4xl">
                     <nav className="flex items-center justify-between">
                         <div className="flex items-center gap-4">

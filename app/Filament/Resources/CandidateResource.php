@@ -27,6 +27,11 @@ class CandidateResource extends Resource
     {
         return $form
             ->schema([
+                Forms\Components\Select::make('election_id')
+                    ->relationship('election', 'name')
+                    ->required()
+                    ->searchable()
+                    ->preload(),
                 Forms\Components\Select::make('voter_id')
                     ->relationship(
                         'voter',
@@ -40,14 +45,22 @@ class CandidateResource extends Resource
                     ->searchable()
                     ->preload(),
                 Forms\Components\Select::make('position_id')
-                    ->relationship('position', 'name')
+                    ->relationship(
+                        'position',
+                        'name',
+                        fn ($query, $get) => $query->when(
+                            $get('election_id'),
+                            fn ($q) => $q->where('election_id', $get('election_id'))
+                        )
+                    )
                     ->getOptionLabelFromRecordUsing(fn ($record) =>
                         "{$record->name} ({$record->level})"
                     )
                     ->required()
                     ->searchable()
                     ->preload()
-                    ->reactive(),
+                    ->reactive()
+                    ->disabled(fn ($get) => ! $get('election_id')),
                 Forms\Components\Select::make('course_id')
                     ->relationship('course', 'course_name')
                     ->searchable()
@@ -95,6 +108,10 @@ class CandidateResource extends Resource
     {
         return $table
             ->columns([
+                Tables\Columns\TextColumn::make('election.name')
+                    ->label('Election')
+                    ->sortable()
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('voter.last_name')
                     ->label('Voter Name')
                     ->formatStateUsing(fn ($record) =>
@@ -110,7 +127,7 @@ class CandidateResource extends Resource
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('department.department_name')
-                    ->sortable()
+                      ->sortable()
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('slogan')
@@ -127,6 +144,10 @@ class CandidateResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('election')
+                    ->relationship('election', 'name')
+                    ->searchable()
+                    ->preload(),
                 Tables\Filters\SelectFilter::make('position')
                     ->relationship('position', 'name')
                     ->searchable()

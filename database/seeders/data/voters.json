@@ -1,0 +1,34 @@
+{
+    "departments": {
+        "CCS": {
+            "name": "College of Computer Studies",
+            "courses": {
+                "BSIT": "Bachelor of Science in Information Technology",
+                "BSCS": "Bachelor of Science in Computer Science"
+            }
+        },
+        "CBA": {
+            "name": "College of Business Administration",
+            "courses": {
+                "BSBA": "Bachelor of Science in Business Administration",
+                "BSA": "Bachelor of Science in Accountancy"
+            }
+        }
+    },
+    "voters": [
+        {
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "john.doe@example.com",
+            "student_number": "20230001",
+            "department": "CCS",
+            "course": "BSIT",
+            "year_level": 2,
+            "votes": {
+                "president": "candidate_student_number_1",
+                "vice_president": "candidate_student_number_2",
+                "department_governor": "candidate_student_number_3"
+            }
+        }
+    ]
+}

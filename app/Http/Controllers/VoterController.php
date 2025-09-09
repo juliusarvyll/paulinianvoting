@@ -8,6 +8,7 @@ use App\Models\Position;
 use App\Models\Candidate;
 use App\Models\Vote;
 use App\Models\Course;
+use App\Models\VoterElectionParticipation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -24,10 +25,17 @@ class VoterController extends Controller
 
         $voter = Voter::where('code', $request->code)->first();
 
-        if ($voter->has_voted) {
-            return back()->withErrors([
-                'code' => 'You have already voted.'
-            ]);
+        // Check per-election voting: if there is an active election, prevent re-voting only for that election
+        $activeElection = Election::active()->first();
+        if ($activeElection) {
+            $alreadyParticipated = VoterElectionParticipation::where('voter_id', $voter->id)
+                ->where('election_id', $activeElection->id)
+                ->exists();
+            if ($alreadyParticipated) {
+                return back()->withErrors([
+                    'code' => 'You have already participated in the current active election.'
+                ]);
+            }
         }
 
         // Store voter in session
@@ -55,32 +63,50 @@ class VoterController extends Controller
             ]);
         }
 
-        // Get positions and candidates based on levels
+        // Prevent access if voter has already participated in the active election
+        $alreadyParticipated = VoterElectionParticipation::where('voter_id', $voter->id)
+            ->where('election_id', $election->id)
+            ->exists();
+        if ($alreadyParticipated) {
+            return redirect()->route('welcome')
+                ->with('error', 'You have already participated in the current active election.');
+        }
+
+        // Get positions and candidates based on levels (scoped to active election)
         $universityPositions = Position::where('level', 'university')
-            ->with(['candidates' => function ($query) {
-                $query->with('voter:id,first_name,last_name,middle_name');
+            ->where('election_id', $election->id)
+            ->with(['candidates' => function ($query) use ($election) {
+                $query->where('election_id', $election->id)
+                    ->with('voter:id,first_name,last_name,middle_name');
             }])
             ->get();
 
         $departmentPositions = Position::where('level', 'department')
-            ->with(['candidates' => function ($query) use ($voter) {
-                $query->where('department_id', $voter->course->department_id)
+            ->where('election_id', $election->id)
+            ->with(['candidates' => function ($query) use ($voter, $election) {
+                $query->where('election_id', $election->id)
+                    ->where('department_id', $voter->course->department_id)
                     ->with('voter:id,first_name,last_name,middle_name');
             }])
             ->get();
 
         $coursePositions = Position::where('level', 'course')
-            ->with(['candidates' => function ($query) use ($voter) {
-                $query->where('course_id', $voter->course_id)
+            ->where('election_id', $election->id)
+            ->with(['candidates' => function ($query) use ($voter, $election) {
+                $query->where('election_id', $election->id)
+                    ->where('course_id', $voter->course_id)
                     ->with('voter:id,first_name,last_name,middle_name');
             }])
             ->get();
 
         $yearLevelPositions = Position::where('level', 'year_level')
-            ->with(['candidates' => function ($query) use ($voter) {
-                $query->whereHas('voter', function ($q) use ($voter) {
-                    $q->where('year_level', $voter->year_level);
-                })->with('voter:id,first_name,last_name,middle_name');
+            ->where('election_id', $election->id)
+            ->with(['candidates' => function ($query) use ($voter, $election) {
+                $query->where('election_id', $election->id)
+                    ->whereHas('voter', function ($q) use ($voter) {
+                        $q->where('year_level', $voter->year_level);
+                    })
+                    ->with('voter:id,first_name,last_name,middle_name');
             }])
             ->get();
 
@@ -119,17 +145,20 @@ class VoterController extends Controller
             }
 
             $voter = Voter::findOrFail($voterId);
-            $election = Election::where('is_active', true)->first();
+            $election = Election::active()->first();
 
             if (!$election) {
                 return redirect()->back()
                     ->with('error', 'No active election found.');
             }
 
-            // Check if voter has already voted
-            if ($voter->has_voted) {
+            // Check if voter has already participated in this election
+            $alreadyParticipated = VoterElectionParticipation::where('voter_id', $voter->id)
+                ->where('election_id', $election->id)
+                ->exists();
+            if ($alreadyParticipated) {
                 return redirect()->back()
-                    ->with('error', 'You have already cast your vote.');
+                    ->with('error', 'You have already participated in this election.');
             }
 
             // Log received data for debugging
@@ -140,24 +169,33 @@ class VoterController extends Controller
             ]);
 
             // Record votes if any were submitted
-            if ($request->has('votes') && !empty($request->votes)) {
+            $hasVotes = $request->has('votes') && !empty($request->votes);
+            if ($hasVotes) {
                 foreach ($request->votes as $vote) {
-                    // Verify that the candidate belongs to the position
-                    $candidate = Candidate::where('id', $vote['candidate_id'])
+                    // Verify that the candidate belongs to the position and the active election
+                    $candidate = Candidate::where('id', $vote["candidate_id"]) 
                         ->where('position_id', $vote['position_id'])
+                        ->where('election_id', $election->id)
                         ->firstOrFail();
 
-                    // Create the vote record using server-validated IDs
+                    // Create the vote record using server-validated IDs and attach election_id
                     Vote::create([
                         'voter_id' => $voter->id, // Always use the authenticated voter from session
                         'candidate_id' => $vote['candidate_id'],
                         'position_id' => $vote['position_id'],
+                        'election_id' => $election->id,
                     ]);
                 }
             }
 
-            // Mark voter as voted
-            $voter->update(['has_voted' => true]);
+            // Record participation even for blank ballots
+            VoterElectionParticipation::create([
+                'voter_id' => $voter->id,
+                'election_id' => $election->id,
+                'participated_at' => now(),
+            ]);
+
+            // Do not update a global has_voted flag; per-election voting is derived from votes
 
             DB::commit();
 
