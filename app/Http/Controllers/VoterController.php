@@ -110,6 +110,19 @@ class VoterController extends Controller
             }])
             ->get();
 
+        $departmentCourseYearPositions = Position::where('level', 'department_course_level')
+            ->where('election_id', $election->id)
+            ->with(['candidates' => function ($query) use ($voter, $election) {
+                $query->where('election_id', $election->id)
+                    ->whereHas('voter', function ($q) use ($voter) {
+                        $q->where('department_id', $voter->department_id)
+                          ->where('course_id', $voter->course_id)
+                          ->where('year_level', $voter->year_level);
+                    })
+                    ->with('voter:id,first_name,last_name,middle_name');
+            }])
+            ->get();
+
         return Inertia::render('Voting/Index', [
             'voter' => $voter,
             'election' => $election,
@@ -118,6 +131,7 @@ class VoterController extends Controller
                 'department' => $departmentPositions,
                 'course' => $coursePositions,
                 'year_level' => $yearLevelPositions,
+                'department_course_level' => $departmentCourseYearPositions,
             ],
             'departments' => $departments,
         ]);

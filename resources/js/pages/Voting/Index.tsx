@@ -23,7 +23,7 @@ interface Position {
     id: number;
     name: string;
     max_winners: number;
-    level: 'university' | 'department' | 'course' | 'year_level';
+    level: 'university' | 'department' | 'course' | 'year_level' | 'department_course_level';
     candidates: Candidate[];
 }
 
@@ -68,6 +68,7 @@ interface Props {
         department: Position[];
         course: Position[];
         year_level: Position[];
+        department_course_level?: Position[];
     };
     departments?: Array<{ id: number; department_name: string }>;
 }
@@ -358,6 +359,9 @@ export default function VotingIndex({ voter, election, positions, departments = 
                         {positions.department.length > 0 && renderPositionSection('Department Wide Positions', positions.department)}
                         {positions.course.length > 0 && renderPositionSection('Course Wide Positions', positions.course)}
                         {positions.year_level.length > 0 && renderPositionSection(`Year ${voter.year_level} Positions`, positions.year_level)}
+                        {positions.department_course_level && positions.department_course_level.length > 0 &&
+                            renderPositionSection('Department + Course + Year Level Positions', positions.department_course_level)
+                        }
 
                         {/* Submit Button */}
                         <div className="mt-8 flex justify-end">
