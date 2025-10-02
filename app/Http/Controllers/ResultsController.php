@@ -107,7 +107,7 @@ class ResultsController extends Controller
                         },
                     ])
                         ->with([
-                            'voter:id,first_name,last_name,middle_name,course_id',
+                            'voter:id,first_name,last_name,middle_name,course_id,year_level',
                             'department',
                             'voter.course.department',
                         ]);
@@ -175,6 +175,46 @@ class ResultsController extends Controller
             });
         }
 
+        // For department + year level positions, compute winners per Department x Year Level, respecting max_winners
+        if ($level === 'department_year_level') {
+            $positions->transform(function ($position) {
+                $groups = [];
+                foreach ($position->candidates as $candidate) {
+                    $deptId = optional($candidate->department ?: optional($candidate->voter->course)->department)->id;
+                    $deptName = optional($candidate->department ?: optional($candidate->voter->course)->department)->department_name;
+                    $yearLevel = $candidate->voter->year_level ?? null;
+
+                    if ($deptId === null || $yearLevel === null) {
+                        // Skip candidates we cannot attribute to a department/year
+                        continue;
+                    }
+
+                    if (!isset($groups[$deptId])) {
+                        $groups[$deptId] = ['departmentName' => $deptName, 'years' => []];
+                    }
+                    if (!isset($groups[$deptId]['years'][$yearLevel])) {
+                        $groups[$deptId]['years'][$yearLevel] = [];
+                    }
+                    $groups[$deptId]['years'][$yearLevel][] = $candidate;
+                }
+
+                // Sort each group by votes_count desc and slice by max_winners
+                $max = (int) ($position->max_winners ?? 1);
+                foreach ($groups as $deptId => $dept) {
+                    foreach ($dept['years'] as $yr => $cands) {
+                        usort($cands, function ($a, $b) {
+                            return ($b->votes_count <=> $a->votes_count);
+                        });
+                        $groups[$deptId]['years'][$yr] = array_slice($cands, 0, max(1, $max));
+                    }
+                }
+
+                // Attach computed winners
+                $position->winners_by_department_year = $groups;
+                return $position;
+            });
+        }
+
         return $positions;
     }
 
@@ -196,6 +236,7 @@ class ResultsController extends Controller
         $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
         $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
         $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
+        $departmentYearLevelPositions = $this->getPositionsWithCandidates('department_year_level', $election->id);
 
         // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();

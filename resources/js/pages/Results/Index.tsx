@@ -20,6 +20,7 @@ interface Candidate {
         last_name: string;
         middle_name: string;
         name: string;
+        year_level?: string | number;
         course?: {
             department?: {
                 department_name: string;
@@ -35,12 +36,22 @@ interface Candidate {
     department_votes?: DepartmentVotes;
 }
 
+interface WinnersByDepartmentYear {
+    [departmentId: string]: {
+        departmentName: string;
+        years: {
+            [yearLevel: string]: Candidate[];
+        };
+    };
+}
+
 interface Position {
     id: number;
     name: string;
     max_winners: number;
     level: 'university' | 'department' | 'course' | 'year_level' | 'department_year_level';
     candidates: Candidate[];
+    winners_by_department_year?: WinnersByDepartmentYear;
 }
 
 interface Props {
@@ -347,6 +358,51 @@ export default function ResultsIndex({ election, positions: initialPositions, in
         </div>
     );
 
+    const renderDepartmentYearLevelWinnersSection = (positionList: Position[]) => (
+        <div className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+            <h3 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">Department + Year Level Positions</h3>
+            <div className="space-y-8">
+                {positionList.map((position) => {
+                    const groups = position.winners_by_department_year || {};
+                    return (
+                        <div key={position.id} className="space-y-4">
+                            <h4 className="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900 dark:border-gray-700 dark:text-white">
+                                {position.name}
+                                <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
+                                    (Top {position.max_winners} per department-year)
+                                </span>
+                            </h4>
+                            {Object.entries(groups).sort((a,b)=>a[1].departmentName.localeCompare(b[1].departmentName)).map(([deptId, dept]) => (
+                                <div key={deptId} className="mb-4">
+                                    <h5 className="text-md font-semibold text-indigo-700 dark:text-indigo-300">
+                                        {dept.departmentName}
+                                    </h5>
+                                    <div className="mt-2 space-y-4">
+                                        {Object.entries(dept.years).sort(([a],[b])=>String(a).localeCompare(String(b))).map(([year, candidates]) => {
+                                            const winnerIds = candidates.map(c => c.id);
+                                            return (
+                                                <div key={`${deptId}-${year}`} className="mb-2">
+                                                    <div className="mb-2 text-sm font-medium text-gray-800 dark:text-gray-200">Year Level: {year}</div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                                        {candidates.map(candidate => (
+                                                            <div key={candidate.id}>
+                                                                {renderCandidateResults(candidate, position, winnerIds, true, undefined, votersTurnout)}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+
     const renderDepartmentWinnersSection = (positionList: Position[]) => (
         <div className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
             <h3 className="mb-6 text-xl font-semibold text-gray-900 dark:text-white">Department Wide Positions</h3>
@@ -549,7 +605,7 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                         {positions.department.length > 0 && renderDepartmentWinnersSection(positions.department)}
                         {positions.course.length > 0 && renderPositionSection('Course Wide Positions', positions.course)}
                         {positions.year_level.length > 0 && renderPositionSection('Year Level Positions', positions.year_level)}
-                        {positions.department_year_level && positions.department_year_level.length > 0 && renderPositionSection('Department + Year Level Positions', positions.department_year_level)}
+                        {positions.department_year_level && positions.department_year_level.length > 0 && renderDepartmentYearLevelWinnersSection(positions.department_year_level)}
                     </div>
                 </main>
             </div>
