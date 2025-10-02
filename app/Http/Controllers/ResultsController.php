@@ -32,6 +32,7 @@ class ResultsController extends Controller
         $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
         $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
         $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
+        $departmentYearLevelPositions = $this->getPositionsWithCandidates('department_year_level', $election->id);
 
         // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
@@ -49,6 +50,7 @@ class ResultsController extends Controller
                 'department' => $departmentPositions,
                 'course' => $coursePositions,
                 'year_level' => $yearLevelPositions,
+                'department_year_level' => $departmentYearLevelPositions,
             ],
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,
@@ -69,6 +71,7 @@ class ResultsController extends Controller
         $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
         $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
         $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
+        $departmentYearLevelPositions = $this->getPositionsWithCandidates('department_year_level', $election->id);
 
         // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
@@ -82,6 +85,7 @@ class ResultsController extends Controller
                 'department' => $departmentPositions,
                 'course' => $coursePositions,
                 'year_level' => $yearLevelPositions,
+                'department_year_level' => $departmentYearLevelPositions,
             ],
             'totalVoters' => $totalVoters,
             'votersTurnout' => $votersTurnout,
@@ -159,7 +163,7 @@ class ResultsController extends Controller
         }
 
         // For department-level positions, attach department directly to each candidate
-        if ($level === 'department') {
+        if ($level === 'department' || $level === 'department_year_level') {
             $positions->transform(function ($position) {
                 $position->candidates->transform(function ($candidate) {
                     // Always provide department directly, fallback to voter's course department if needed
@@ -209,6 +213,7 @@ class ResultsController extends Controller
                 'department' => $departmentPositions,
                 'course' => $coursePositions,
                 'year_level' => $yearLevelPositions,
+                'department_year_level' => $departmentYearLevelPositions,
             ],
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,

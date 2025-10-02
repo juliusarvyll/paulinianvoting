@@ -48,6 +48,7 @@ class PositionResource extends Resource
                         'course' => 'Course',
                         'year_level' => "Year Level",
                         'department_course_level' => 'Department + Course + Year Level',
+                        'department_year_level' => 'Department + Year Level',
                     ]),
             ]);
     }
@@ -91,6 +92,7 @@ class PositionResource extends Resource
                         'course' => 'Course',
                         'year_level' => 'Year Level',
                         'department_course_level' => 'Department + Course + Year Level',
+                        'department_year_level' => 'Department + Year Level',
                     ]),
             ])
             ->actions([

@@ -39,7 +39,7 @@ interface Position {
     id: number;
     name: string;
     max_winners: number;
-    level: 'university' | 'department' | 'course' | 'year_level';
+    level: 'university' | 'department' | 'course' | 'year_level' | 'department_year_level';
     candidates: Candidate[];
 }
 
@@ -55,6 +55,7 @@ interface Props {
         department: Position[];
         course: Position[];
         year_level: Position[];
+        department_year_level?: Position[];
     };
     initialTotalVoters: number;
     initialVotersTurnout: number;
@@ -548,6 +549,7 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                         {positions.department.length > 0 && renderDepartmentWinnersSection(positions.department)}
                         {positions.course.length > 0 && renderPositionSection('Course Wide Positions', positions.course)}
                         {positions.year_level.length > 0 && renderPositionSection('Year Level Positions', positions.year_level)}
+                        {positions.department_year_level && positions.department_year_level.length > 0 && renderPositionSection('Department + Year Level Positions', positions.department_year_level)}
                     </div>
                 </main>
             </div>

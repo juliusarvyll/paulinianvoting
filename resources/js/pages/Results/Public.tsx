@@ -39,7 +39,7 @@ interface Position {
     id: number;
     name: string;
     max_winners: number;
-    level: 'university' | 'department' | 'course' | 'year_level';
+    level: 'university' | 'department' | 'course' | 'year_level' | 'department_year_level';
     candidates: Candidate[];
 }
 
@@ -55,6 +55,7 @@ interface Props {
         department: Position[];
         course: Position[];
         year_level: Position[];
+        department_year_level?: Position[];
     };
     initialTotalVoters: number;
     initialVotersTurnout: number;
@@ -62,7 +63,7 @@ interface Props {
 
 export default function PublicResults({ election, positions: initialPositions, initialTotalVoters, initialVotersTurnout }: Props) {
     const { appearance, updateAppearance } = useAppearance();
-    const departmentVoterCounts = usePage().props.departmentVoterCounts || {};
+    const departmentVoterCounts = (usePage().props.departmentVoterCounts as Record<string, number>) || {};
     const [positions, setPositions] = useState(initialPositions);
     const [totalVoters, setTotalVoters] = useState(initialTotalVoters);
     const [votersTurnout, setVotersTurnout] = useState(initialVotersTurnout);
@@ -550,6 +551,7 @@ export default function PublicResults({ election, positions: initialPositions, i
                         {positions.department.length > 0 && renderDepartmentWinnersSection(positions.department)}
                         {positions.course.length > 0 && renderPositionSection('Course Wide Positions', positions.course)}
                         {positions.year_level.length > 0 && renderPositionSection('Year Level Positions', positions.year_level)}
+                        {positions.department_year_level && positions.department_year_level.length > 0 && renderPositionSection('Department + Year Level Positions', positions.department_year_level)}
                     </div>
                 </main>
             </div>
