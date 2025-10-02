@@ -42,6 +42,35 @@ class ResultsController extends Controller
         $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
             ->groupBy('department_id')
             ->pluck('count', 'department_id');
+        // Voter counts per Department x Year Level (for department_year_level percentages)
+        $deptYearCountsRawPublic = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
+            ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
+            ->groupBy('courses.department_id', 'voters.year_level')
+            ->get();
+        $departmentYearLevelVoterCountsPublic = [];
+        foreach ($deptYearCountsRawPublic as $row) {
+            $deptId = (string) $row->department_id;
+            $year = (string) $row->year_level;
+            if (!isset($departmentYearLevelVoterCountsPublic[$deptId])) {
+                $departmentYearLevelVoterCountsPublic[$deptId] = [];
+            }
+            $departmentYearLevelVoterCountsPublic[$deptId][$year] = (int) $row->count;
+        }
+        // Voter counts per Department x Year Level
+        $deptYearCountsRaw = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
+            ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
+            ->groupBy('courses.department_id', 'voters.year_level')
+            ->get();
+        $departmentYearLevelVoterCounts = [];
+        foreach ($deptYearCountsRaw as $row) {
+            $deptId = (string) $row->department_id;
+            $year = (string) $row->year_level;
+            if (!isset($departmentYearLevelVoterCounts[$deptId])) {
+                $departmentYearLevelVoterCounts[$deptId] = [];
+            }
+            $departmentYearLevelVoterCounts[$deptId][$year] = (int) $row->count;
+        }
+        $departments = DB::table('departments')->select('id', 'department_name')->get();
 
         return Inertia::render('Results/Index', [
             'election' => $election,
@@ -55,6 +84,8 @@ class ResultsController extends Controller
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,
             'departmentVoterCounts' => $departmentVoterCounts,
+            'departmentYearLevelVoterCounts' => $departmentYearLevelVoterCounts,
+            'departments' => $departments,
         ]);
     }
 
@@ -259,6 +290,40 @@ class ResultsController extends Controller
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,
             'departmentVoterCounts' => $departmentVoterCounts,
+            'departmentYearLevelVoterCounts' => $departmentYearLevelVoterCountsPublic,
+            'departments' => $departments,
         ]);
+    }
+
+    /**
+     * Return voters for a given department (paginated) for on-demand display in results UI.
+     */
+    public function votersByDepartment(Request $request)
+    {
+        $departmentId = $request->query('department_id');
+        if (!$departmentId) {
+            return response()->json(['error' => 'department_id is required'], 422);
+        }
+
+        $perPage = (int) $request->query('per_page', 50);
+        $search = trim((string) $request->query('q', ''));
+
+        $query = Voter::query()
+            ->select('voters.id', 'voters.first_name', 'voters.last_name', 'voters.middle_name', 'voters.year_level', 'voters.course_id')
+            ->join('courses', 'voters.course_id', '=', 'courses.id')
+            ->where('courses.department_id', $departmentId)
+            ->with(['course:id,name']);
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('voters.first_name', 'like', "%$search%")
+                  ->orWhere('voters.last_name', 'like', "%$search%")
+                  ->orWhere('voters.middle_name', 'like', "%$search%");
+            });
+        }
+
+        $voters = $query->orderBy('voters.last_name')->orderBy('voters.first_name')->paginate($perPage);
+
+        return response()->json($voters);
     }
 }

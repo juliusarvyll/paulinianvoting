@@ -30,6 +30,7 @@ Route::post('/voter/logout', [VoterController::class, 'logout'])->name('voter.lo
 // Election Results Routes
 Route::get('/resultszxc', [ResultsController::class, 'index'])->name('results');
 Route::get('/results/data', [ResultsController::class, 'data'])->name('results.data');
+Route::get('/results/voters-by-department', [ResultsController::class, 'votersByDepartment'])->name('results.voters-by-department');
 Route::get('/live-resultszxc', [ResultsController::class, 'public'])->name('results.public');
 
 require __DIR__.'/settings.php';

@@ -75,6 +75,8 @@ interface Props {
 export default function ResultsIndex({ election, positions: initialPositions, initialTotalVoters, initialVotersTurnout }: Props) {
     const { appearance, updateAppearance } = useAppearance();
     const departmentVoterCounts = usePage().props.departmentVoterCounts as Record<string, number> || {};
+    const departmentYearLevelVoterCounts = usePage().props.departmentYearLevelVoterCounts as Record<string, Record<string, number>> || {};
+    const departments = (usePage().props.departments as { id: number; department_name: string }[]) || [];
     const [positions, setPositions] = useState(initialPositions);
     const [totalVoters, setTotalVoters] = useState(initialTotalVoters);
     const [votersTurnout, setVotersTurnout] = useState(initialVotersTurnout);
@@ -83,6 +85,18 @@ export default function ResultsIndex({ election, positions: initialPositions, in
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [selectedDepartment, setSelectedDepartment] = useState<string>('All');
     const [exporting, setExporting] = useState(false);
+
+    type DeptVotersState = {
+        [deptId: number]: {
+            open: boolean;
+            items: Array<{ id: number; first_name: string; last_name: string; middle_name: string; year_level?: string | number; course?: { name: string } }>;
+            page: number;
+            lastPage: number;
+            loading: boolean;
+            q: string;
+        };
+    };
+    const [deptVoters, setDeptVoters] = useState<DeptVotersState>({});
 
     // Memoize all department names for the filter
     const allDepartments = useMemo(() => Array.from(
@@ -121,6 +135,46 @@ export default function ResultsIndex({ election, positions: initialPositions, in
         }
     };
 
+    const toggleDeptOpen = (deptId: number) => {
+        setDeptVoters((prev) => ({
+            ...prev,
+            [deptId]: { ...(prev[deptId] || { items: [], page: 0, lastPage: 0, loading: false, q: '' }), open: !(prev[deptId]?.open) },
+        }));
+        // Lazy-load first page
+        if (!deptVoters[deptId]?.items?.length) {
+            fetchDeptVoters(deptId, 1, deptVoters[deptId]?.q || '');
+        }
+    };
+
+    const fetchDeptVoters = async (deptId: number, page = 1, q = '') => {
+        setDeptVoters((prev) => ({ ...prev, [deptId]: { ...(prev[deptId] || { items: [], page: 0, lastPage: 0, q: '' }), loading: true } }));
+        try {
+            const url = route('results.voters-by-department', { department_id: deptId, page, q, per_page: 50 });
+            const res = await axios.get(url);
+            const data = res.data;
+            const items = Array.isArray(data.data) ? data.data : [];
+            setDeptVoters((prev) => ({
+                ...prev,
+                [deptId]: {
+                    ...(prev[deptId] || { open: true, q }),
+                    open: true,
+                    items: page === 1 ? items : [...(prev[deptId]?.items || []), ...items],
+                    page: data.current_page || page,
+                    lastPage: data.last_page || page,
+                    loading: false,
+                    q,
+                },
+            }));
+        } catch (e) {
+            setDeptVoters((prev) => ({ ...prev, [deptId]: { ...(prev[deptId] || {}), loading: false } }));
+        }
+    };
+
+    const onSearchDept = (deptId: number, q: string) => {
+        setDeptVoters((prev) => ({ ...prev, [deptId]: { ...(prev[deptId] || { items: [], page: 0, lastPage: 0 }), q } }));
+        fetchDeptVoters(deptId, 1, q);
+    };
+
     useEffect(() => {
         let intervalId: NodeJS.Timeout | null = null;
 
@@ -142,11 +196,17 @@ export default function ResultsIndex({ election, positions: initialPositions, in
 
     const renderCandidateResults = (candidate: Candidate, position: Position, winnerIds?: number[], isValidTurnout?: boolean, minTurnout?: number, votersTurnout?: number) => {
         let percentage = 0;
-        if (position.level === 'department') {
+        if (position.level === 'department' || position.level === 'department_year_level') {
             // Try all possible department id sources
             const deptId = (candidate as any).department_id || (candidate.department && ((candidate.department as any).id || (candidate.department as any).department_id));
-            const deptTotal = deptId ? departmentVoterCounts[String(deptId)] ?? 0 : 0;
-            percentage = deptTotal > 0 ? Math.round((candidate.votes_count / deptTotal) * 100) : 0;
+            if (position.level === 'department_year_level') {
+                const year = candidate.voter.year_level != null ? String(candidate.voter.year_level) : '';
+                const deptYearTotal = deptId && year !== '' ? (departmentYearLevelVoterCounts[String(deptId)]?.[year] ?? 0) : 0;
+                percentage = deptYearTotal > 0 ? Math.round((candidate.votes_count / deptYearTotal) * 100) : 0;
+            } else {
+                const deptTotal = deptId ? departmentVoterCounts[String(deptId)] ?? 0 : 0;
+                percentage = deptTotal > 0 ? Math.round((candidate.votes_count / deptTotal) * 100) : 0;
+            }
         } else {
             percentage = votersTurnout && votersTurnout > 0
                 ? Math.round((candidate.votes_count / votersTurnout) * 100)
@@ -376,13 +436,19 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                                 <div key={deptId} className="mb-4">
                                     <h5 className="text-md font-semibold text-indigo-700 dark:text-indigo-300">
                                         {dept.departmentName}
+                                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Total Voters: {departmentVoterCounts[String(deptId)] ?? 0})</span>
                                     </h5>
                                     <div className="mt-2 space-y-4">
                                         {Object.entries(dept.years).sort(([a],[b])=>String(a).localeCompare(String(b))).map(([year, candidates]) => {
                                             const winnerIds = candidates.map(c => c.id);
                                             return (
                                                 <div key={`${deptId}-${year}`} className="mb-2">
-                                                    <div className="mb-2 text-sm font-medium text-gray-800 dark:text-gray-200">Year Level: {year}</div>
+                                                    <div className="mb-2 text-sm font-medium text-gray-800 dark:text-gray-200">
+                                                        Year Level: {year}
+                                                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                                            (Voters: {departmentYearLevelVoterCounts[String(deptId)]?.[String(year)] ?? 0})
+                                                        </span>
+                                                    </div>
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                                         {candidates.map(candidate => (
                                                             <div key={candidate.id}>
