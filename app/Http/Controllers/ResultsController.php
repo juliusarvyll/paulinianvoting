@@ -15,6 +15,20 @@ use Illuminate\Support\Facades\DB;
 class ResultsController extends Controller
 {
     /**
+     * Get per-department count of voters who participated in an election.
+     */
+    private function getDepartmentTurnoutCounts(int $electionId): array
+    {
+        return VoterElectionParticipation::where('voter_election_participations.election_id', $electionId)
+            ->join('voters', 'voter_election_participations.voter_id', '=', 'voters.id')
+            ->select('voters.department_id', DB::raw('count(*) as count'))
+            ->groupBy('voters.department_id')
+            ->pluck('count', 'voters.department_id')
+            ->map(fn ($v) => (int) $v)
+            ->toArray();
+    }
+
+    /**
      * Display the results page.
      */
     public function index()
@@ -42,6 +56,7 @@ class ResultsController extends Controller
         $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
             ->groupBy('department_id')
             ->pluck('count', 'department_id');
+        $departmentTurnoutCounts = $this->getDepartmentTurnoutCounts($election->id);
         // Voter counts per Department x Year Level (for department_year_level percentages)
         $deptYearCountsRawPublic = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
             ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
@@ -84,6 +99,7 @@ class ResultsController extends Controller
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,
             'departmentVoterCounts' => $departmentVoterCounts,
+            'departmentTurnoutCounts' => $departmentTurnoutCounts,
             'departmentYearLevelVoterCounts' => $departmentYearLevelVoterCounts,
             'departments' => $departments,
         ]);
@@ -109,6 +125,7 @@ class ResultsController extends Controller
         $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
             ->distinct()
             ->count('voter_id');
+        $departmentTurnoutCounts = $this->getDepartmentTurnoutCounts($election->id);
 
         return response()->json([
             'positions' => [
@@ -120,6 +137,7 @@ class ResultsController extends Controller
             ],
             'totalVoters' => $totalVoters,
             'votersTurnout' => $votersTurnout,
+            'departmentTurnoutCounts' => $departmentTurnoutCounts,
         ]);
     }
 
@@ -292,6 +310,7 @@ class ResultsController extends Controller
             $departmentYearLevelVoterCountsPublic[$deptId][$year] = (int) $row->count;
         }
         $departments = DB::table('departments')->select('id', 'department_name')->get();
+        $departmentTurnoutCounts = $this->getDepartmentTurnoutCounts($election->id);
 
         return Inertia::render('Results/Public', [
             'election' => $election,
@@ -305,6 +324,7 @@ class ResultsController extends Controller
             'initialTotalVoters' => $totalVoters,
             'initialVotersTurnout' => $votersTurnout,
             'departmentVoterCounts' => $departmentVoterCounts,
+            'departmentTurnoutCounts' => $departmentTurnoutCounts,
             'departmentYearLevelVoterCounts' => $departmentYearLevelVoterCountsPublic,
             'departments' => $departments,
         ]);

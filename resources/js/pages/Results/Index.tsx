@@ -77,9 +77,11 @@ export default function ResultsIndex({ election, positions: initialPositions, in
     const departmentVoterCounts = usePage().props.departmentVoterCounts as Record<string, number> || {};
     const departmentYearLevelVoterCounts = usePage().props.departmentYearLevelVoterCounts as Record<string, Record<string, number>> || {};
     const departments = (usePage().props.departments as { id: number; department_name: string }[]) || [];
+    const initialDeptTurnout = usePage().props.departmentTurnoutCounts as Record<string, number> || {};
     const [positions, setPositions] = useState(initialPositions);
     const [totalVoters, setTotalVoters] = useState(initialTotalVoters);
     const [votersTurnout, setVotersTurnout] = useState(initialVotersTurnout);
+    const [departmentTurnoutCounts, setDepartmentTurnoutCounts] = useState<Record<string, number>>(initialDeptTurnout);
     const [loading, setLoading] = useState(false);
     const [lastUpdated, setLastUpdated] = useState(new Date());
     const [autoRefresh, setAutoRefresh] = useState(true);
@@ -118,6 +120,9 @@ export default function ResultsIndex({ election, positions: initialPositions, in
             setPositions(response.data.positions);
             setTotalVoters(response.data.totalVoters);
             setVotersTurnout(response.data.votersTurnout);
+            if (response.data.departmentTurnoutCounts) {
+                setDepartmentTurnoutCounts(response.data.departmentTurnoutCounts);
+            }
             setLastUpdated(new Date());
         } catch (error) {
             console.error('Error fetching results:', error);
@@ -516,12 +521,13 @@ export default function ResultsIndex({ election, positions: initialPositions, in
                                 .map(([deptName, candidates]) => {
                                     const deptId = (candidates[0] as any).department_id || (candidates[0].department && ((candidates[0].department as any).id || (candidates[0].department as any).department_id));
                                     const totalVoters = deptId ? departmentVoterCounts[String(deptId)] ?? 0 : 0;
+                                    const deptTurnout = deptId ? departmentTurnoutCounts[String(deptId)] ?? 0 : 0;
                                     const winnerIds = candidates
                                         .slice()
                                         .sort((a, b) => b.votes_count - a.votes_count)
                                         .slice(0, position.max_winners)
                                         .map(c => c.id);
-                                    const isValidTurnout = votersTurnout >= Math.floor(totalVoters / 2) + 1;
+                                    const isValidTurnout = deptTurnout >= Math.floor(totalVoters / 2) + 1;
                                     const minTurnout = Math.floor(totalVoters / 2) + 1;
                                     return (
                                         <div key={deptName} className="mb-4">
