@@ -6,8 +6,6 @@ use App\Models\Election;
 use App\Models\Position;
 use App\Models\Voter;
 use App\Models\Vote;
-use App\Models\Candidate;
-use App\Models\VoterElectionParticipation;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -15,17 +13,102 @@ use Illuminate\Support\Facades\DB;
 class ResultsController extends Controller
 {
     /**
-     * Get per-department count of voters who participated in an election.
+     * Get the distinct number of voters who cast at least one vote in an election.
+     */
+    private function getElectionTurnoutCount(int $electionId): int
+    {
+        return Vote::where('election_id', $electionId)
+            ->distinct()
+            ->count('voter_id');
+    }
+
+    /**
+     * Get per-department count of voters who cast at least one vote in an election.
      */
     private function getDepartmentTurnoutCounts(int $electionId): array
     {
-        return VoterElectionParticipation::where('voter_election_participations.election_id', $electionId)
-            ->join('voters', 'voter_election_participations.voter_id', '=', 'voters.id')
-            ->select('voters.department_id', DB::raw('count(*) as count'))
-            ->groupBy('voters.department_id')
-            ->pluck('count', 'voters.department_id')
+        return Vote::where('votes.election_id', $electionId)
+            ->join('voters', 'votes.voter_id', '=', 'voters.id')
+            ->join('courses', 'voters.course_id', '=', 'courses.id')
+            ->select('courses.department_id', DB::raw('count(distinct votes.voter_id) as count'))
+            ->groupBy('courses.department_id')
+            ->pluck('count', 'courses.department_id')
             ->map(fn ($v) => (int) $v)
             ->toArray();
+    }
+
+    /**
+     * Get total registered voters grouped by department.
+     */
+    private function getDepartmentVoterCounts()
+    {
+        return Voter::join('courses', 'voters.course_id', '=', 'courses.id')
+            ->select('courses.department_id', DB::raw('count(*) as count'))
+            ->groupBy('courses.department_id')
+            ->pluck('count', 'courses.department_id');
+    }
+
+    /**
+     * Get total registered voters grouped by department and year level.
+     */
+    private function getDepartmentYearLevelVoterCounts(): array
+    {
+        $counts = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
+            ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
+            ->groupBy('courses.department_id', 'voters.year_level')
+            ->get();
+
+        $formattedCounts = [];
+
+        foreach ($counts as $row) {
+            $deptId = (string) $row->department_id;
+            $year = (string) $row->year_level;
+
+            if (!isset($formattedCounts[$deptId])) {
+                $formattedCounts[$deptId] = [];
+            }
+
+            $formattedCounts[$deptId][$year] = (int) $row->count;
+        }
+
+        return $formattedCounts;
+    }
+
+    /**
+     * Build the shared results payload for both initial render and refreshes.
+     */
+    private function getResultsPayload(Election $election): array
+    {
+        $electionId = $election->id;
+
+        $universityPositions = $this->getPositionsWithCandidates('university', $electionId);
+        $departmentPositions = $this->getPositionsWithCandidates('department', $electionId);
+        $coursePositions = $this->getPositionsWithCandidates('course', $electionId);
+        $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $electionId);
+        $departmentYearLevelPositions = $this->getPositionsWithCandidates('department_year_level', $electionId);
+
+        $totalVoters = Voter::count();
+        $votersTurnout = $this->getElectionTurnoutCount($electionId);
+        $departmentVoterCounts = $this->getDepartmentVoterCounts();
+        $departmentTurnoutCounts = $this->getDepartmentTurnoutCounts($electionId);
+        $departmentYearLevelVoterCounts = $this->getDepartmentYearLevelVoterCounts();
+        $departments = DB::table('departments')->select('id', 'department_name')->get();
+
+        return [
+            'positions' => [
+                'university' => $universityPositions,
+                'department' => $departmentPositions,
+                'course' => $coursePositions,
+                'year_level' => $yearLevelPositions,
+                'department_year_level' => $departmentYearLevelPositions,
+            ],
+            'totalVoters' => $totalVoters,
+            'votersTurnout' => $votersTurnout,
+            'departmentVoterCounts' => $departmentVoterCounts,
+            'departmentTurnoutCounts' => $departmentTurnoutCounts,
+            'departmentYearLevelVoterCounts' => $departmentYearLevelVoterCounts,
+            'departments' => $departments,
+        ];
     }
 
     /**
@@ -41,67 +124,17 @@ class ResultsController extends Controller
                 ->with('error', 'No active election at the moment.');
         }
 
-        // Get positions and candidates with vote counts (scoped to active election)
-        $universityPositions = $this->getPositionsWithCandidates('university', $election->id);
-        $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
-        $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
-        $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
-        $departmentYearLevelPositions = $this->getPositionsWithCandidates('department_year_level', $election->id);
-
-        // Get voter statistics (turnout by participation for active election)
-        $totalVoters = Voter::count();
-        $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
-            ->distinct()
-            ->count('voter_id');
-        $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
-            ->groupBy('department_id')
-            ->pluck('count', 'department_id');
-        $departmentTurnoutCounts = $this->getDepartmentTurnoutCounts($election->id);
-        // Voter counts per Department x Year Level (for department_year_level percentages)
-        $deptYearCountsRawPublic = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
-            ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
-            ->groupBy('courses.department_id', 'voters.year_level')
-            ->get();
-        $departmentYearLevelVoterCountsPublic = [];
-        foreach ($deptYearCountsRawPublic as $row) {
-            $deptId = (string) $row->department_id;
-            $year = (string) $row->year_level;
-            if (!isset($departmentYearLevelVoterCountsPublic[$deptId])) {
-                $departmentYearLevelVoterCountsPublic[$deptId] = [];
-            }
-            $departmentYearLevelVoterCountsPublic[$deptId][$year] = (int) $row->count;
-        }
-        // Voter counts per Department x Year Level
-        $deptYearCountsRaw = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
-            ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
-            ->groupBy('courses.department_id', 'voters.year_level')
-            ->get();
-        $departmentYearLevelVoterCounts = [];
-        foreach ($deptYearCountsRaw as $row) {
-            $deptId = (string) $row->department_id;
-            $year = (string) $row->year_level;
-            if (!isset($departmentYearLevelVoterCounts[$deptId])) {
-                $departmentYearLevelVoterCounts[$deptId] = [];
-            }
-            $departmentYearLevelVoterCounts[$deptId][$year] = (int) $row->count;
-        }
-        $departments = DB::table('departments')->select('id', 'department_name')->get();
+        $resultsPayload = $this->getResultsPayload($election);
 
         return Inertia::render('Results/Index', [
             'election' => $election,
-            'positions' => [
-                'university' => $universityPositions,
-                'department' => $departmentPositions,
-                'course' => $coursePositions,
-                'year_level' => $yearLevelPositions,
-                'department_year_level' => $departmentYearLevelPositions,
-            ],
-            'initialTotalVoters' => $totalVoters,
-            'initialVotersTurnout' => $votersTurnout,
-            'departmentVoterCounts' => $departmentVoterCounts,
-            'departmentTurnoutCounts' => $departmentTurnoutCounts,
-            'departmentYearLevelVoterCounts' => $departmentYearLevelVoterCounts,
-            'departments' => $departments,
+            'positions' => $resultsPayload['positions'],
+            'initialTotalVoters' => $resultsPayload['totalVoters'],
+            'initialVotersTurnout' => $resultsPayload['votersTurnout'],
+            'departmentVoterCounts' => $resultsPayload['departmentVoterCounts'],
+            'departmentTurnoutCounts' => $resultsPayload['departmentTurnoutCounts'],
+            'departmentYearLevelVoterCounts' => $resultsPayload['departmentYearLevelVoterCounts'],
+            'departments' => $resultsPayload['departments'],
         ]);
     }
 
@@ -113,32 +146,11 @@ class ResultsController extends Controller
         // Get active election
         $election = Election::active()->first();
 
-        // Get positions and candidates with vote counts (scoped to active election)
-        $universityPositions = $this->getPositionsWithCandidates('university', $election->id);
-        $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
-        $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
-        $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
-        $departmentYearLevelPositions = $this->getPositionsWithCandidates('department_year_level', $election->id);
+        if (!$election) {
+            return response()->json(['message' => 'No active election at the moment.'], 404);
+        }
 
-        // Get voter statistics (turnout by participation for active election)
-        $totalVoters = Voter::count();
-        $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
-            ->distinct()
-            ->count('voter_id');
-        $departmentTurnoutCounts = $this->getDepartmentTurnoutCounts($election->id);
-
-        return response()->json([
-            'positions' => [
-                'university' => $universityPositions,
-                'department' => $departmentPositions,
-                'course' => $coursePositions,
-                'year_level' => $yearLevelPositions,
-                'department_year_level' => $departmentYearLevelPositions,
-            ],
-            'totalVoters' => $totalVoters,
-            'votersTurnout' => $votersTurnout,
-            'departmentTurnoutCounts' => $departmentTurnoutCounts,
-        ]);
+        return response()->json($this->getResultsPayload($election));
     }
 
     /**
@@ -280,53 +292,17 @@ class ResultsController extends Controller
                 ->with('error', 'No active election at the moment.');
         }
 
-        // Get positions and candidates with vote counts (scoped to active election)
-        $universityPositions = $this->getPositionsWithCandidates('university', $election->id);
-        $departmentPositions = $this->getPositionsWithCandidates('department', $election->id);
-        $coursePositions = $this->getPositionsWithCandidates('course', $election->id);
-        $yearLevelPositions = $this->getPositionsWithCandidates('year_level', $election->id);
-        $departmentYearLevelPositions = $this->getPositionsWithCandidates('department_year_level', $election->id);
-
-        // Get voter statistics (turnout by participation for active election)
-        $totalVoters = Voter::count();
-        $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
-            ->distinct()
-            ->count('voter_id');
-        $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
-            ->groupBy('department_id')
-            ->pluck('count', 'department_id');
-
-        $deptYearCountsRawPublic = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
-            ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
-            ->groupBy('courses.department_id', 'voters.year_level')
-            ->get();
-        $departmentYearLevelVoterCountsPublic = [];
-        foreach ($deptYearCountsRawPublic as $row) {
-            $deptId = (string) $row->department_id;
-            $year = (string) $row->year_level;
-            if (!isset($departmentYearLevelVoterCountsPublic[$deptId])) {
-                $departmentYearLevelVoterCountsPublic[$deptId] = [];
-            }
-            $departmentYearLevelVoterCountsPublic[$deptId][$year] = (int) $row->count;
-        }
-        $departments = DB::table('departments')->select('id', 'department_name')->get();
-        $departmentTurnoutCounts = $this->getDepartmentTurnoutCounts($election->id);
+        $resultsPayload = $this->getResultsPayload($election);
 
         return Inertia::render('Results/Public', [
             'election' => $election,
-            'positions' => [
-                'university' => $universityPositions,
-                'department' => $departmentPositions,
-                'course' => $coursePositions,
-                'year_level' => $yearLevelPositions,
-                'department_year_level' => $departmentYearLevelPositions,
-            ],
-            'initialTotalVoters' => $totalVoters,
-            'initialVotersTurnout' => $votersTurnout,
-            'departmentVoterCounts' => $departmentVoterCounts,
-            'departmentTurnoutCounts' => $departmentTurnoutCounts,
-            'departmentYearLevelVoterCounts' => $departmentYearLevelVoterCountsPublic,
-            'departments' => $departments,
+            'positions' => $resultsPayload['positions'],
+            'initialTotalVoters' => $resultsPayload['totalVoters'],
+            'initialVotersTurnout' => $resultsPayload['votersTurnout'],
+            'departmentVoterCounts' => $resultsPayload['departmentVoterCounts'],
+            'departmentTurnoutCounts' => $resultsPayload['departmentTurnoutCounts'],
+            'departmentYearLevelVoterCounts' => $resultsPayload['departmentYearLevelVoterCounts'],
+            'departments' => $resultsPayload['departments'],
         ]);
     }
 

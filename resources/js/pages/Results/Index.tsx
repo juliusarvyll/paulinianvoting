@@ -12,6 +12,11 @@ interface DepartmentVotes {
     };
 }
 
+interface DepartmentSummary {
+    id: number;
+    department_name: string;
+}
+
 interface Candidate {
     id: number;
     voter: {
@@ -74,13 +79,16 @@ interface Props {
 
 export default function ResultsIndex({ election, positions: initialPositions, initialTotalVoters, initialVotersTurnout }: Props) {
     const { appearance, updateAppearance } = useAppearance();
-    const departmentVoterCounts = usePage().props.departmentVoterCounts as Record<string, number> || {};
-    const departmentYearLevelVoterCounts = usePage().props.departmentYearLevelVoterCounts as Record<string, Record<string, number>> || {};
-    const departments = (usePage().props.departments as { id: number; department_name: string }[]) || [];
+    const initialDepartmentVoterCounts = usePage().props.departmentVoterCounts as Record<string, number> || {};
+    const initialDepartmentYearLevelVoterCounts = usePage().props.departmentYearLevelVoterCounts as Record<string, Record<string, number>> || {};
+    const initialDepartments = (usePage().props.departments as DepartmentSummary[]) || [];
     const initialDeptTurnout = usePage().props.departmentTurnoutCounts as Record<string, number> || {};
     const [positions, setPositions] = useState(initialPositions);
     const [totalVoters, setTotalVoters] = useState(initialTotalVoters);
     const [votersTurnout, setVotersTurnout] = useState(initialVotersTurnout);
+    const [departmentVoterCounts, setDepartmentVoterCounts] = useState<Record<string, number>>(initialDepartmentVoterCounts);
+    const [departmentYearLevelVoterCounts, setDepartmentYearLevelVoterCounts] = useState<Record<string, Record<string, number>>>(initialDepartmentYearLevelVoterCounts);
+    const [departments, setDepartments] = useState<DepartmentSummary[]>(initialDepartments);
     const [departmentTurnoutCounts, setDepartmentTurnoutCounts] = useState<Record<string, number>>(initialDeptTurnout);
     const [loading, setLoading] = useState(false);
     const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -120,6 +128,15 @@ export default function ResultsIndex({ election, positions: initialPositions, in
             setPositions(response.data.positions);
             setTotalVoters(response.data.totalVoters);
             setVotersTurnout(response.data.votersTurnout);
+            if (response.data.departmentVoterCounts) {
+                setDepartmentVoterCounts(response.data.departmentVoterCounts);
+            }
+            if (response.data.departmentYearLevelVoterCounts) {
+                setDepartmentYearLevelVoterCounts(response.data.departmentYearLevelVoterCounts);
+            }
+            if (response.data.departments) {
+                setDepartments(response.data.departments);
+            }
             if (response.data.departmentTurnoutCounts) {
                 setDepartmentTurnoutCounts(response.data.departmentTurnoutCounts);
             }
