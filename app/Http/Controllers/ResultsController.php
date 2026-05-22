@@ -278,6 +278,21 @@ class ResultsController extends Controller
             ->groupBy('department_id')
             ->pluck('count', 'department_id');
 
+        $deptYearCountsRawPublic = Voter::join('courses', 'voters.course_id', '=', 'courses.id')
+            ->select('courses.department_id as department_id', 'voters.year_level', DB::raw('count(*) as count'))
+            ->groupBy('courses.department_id', 'voters.year_level')
+            ->get();
+        $departmentYearLevelVoterCountsPublic = [];
+        foreach ($deptYearCountsRawPublic as $row) {
+            $deptId = (string) $row->department_id;
+            $year = (string) $row->year_level;
+            if (!isset($departmentYearLevelVoterCountsPublic[$deptId])) {
+                $departmentYearLevelVoterCountsPublic[$deptId] = [];
+            }
+            $departmentYearLevelVoterCountsPublic[$deptId][$year] = (int) $row->count;
+        }
+        $departments = DB::table('departments')->select('id', 'department_name')->get();
+
         return Inertia::render('Results/Public', [
             'election' => $election,
             'positions' => [
