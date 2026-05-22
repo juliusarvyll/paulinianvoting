@@ -37,7 +37,7 @@ class ResultsController extends Controller
         // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
         $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
-            ->distinct('voter_id')
+            ->distinct()
             ->count('voter_id');
         $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
             ->groupBy('department_id')
@@ -107,7 +107,7 @@ class ResultsController extends Controller
         // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
         $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
-            ->distinct('voter_id')
+            ->distinct()
             ->count('voter_id');
 
         return response()->json([
@@ -272,7 +272,7 @@ class ResultsController extends Controller
         // Get voter statistics (turnout by participation for active election)
         $totalVoters = Voter::count();
         $votersTurnout = VoterElectionParticipation::where('election_id', $election->id)
-            ->distinct('voter_id')
+            ->distinct()
             ->count('voter_id');
         $departmentVoterCounts = Voter::select('department_id', DB::raw('count(*) as count'))
             ->groupBy('department_id')
