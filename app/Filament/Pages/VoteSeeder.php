@@ -25,9 +25,10 @@ class VoteSeeder extends Page
     public $balance_department_turnout = true;
     public $allow_turnout_overflow = false;
     public $turnout_mode = 'percent';
-    public $turnout_value = 75;
+    public $turnout_value = 83;
     public $minimum_votes = 0;
     public $position_configs = [];
+    public $boost_position_configs = [];
 
     public function mount(): void
     {
@@ -45,12 +46,14 @@ class VoteSeeder extends Page
                 ->required()
                 ->afterStateUpdated(function (callable $set) {
                     $set('position_configs', []);
+                    $set('boost_position_configs', []);
                 }),
             Forms\Components\Select::make('seed_mode')
                 ->label('Seed Mode')
                 ->options([
                     'selected_winners' => 'Choose winners per position',
                     'boost_existing' => 'Boost current standings',
+                    'random_high_votes' => 'Random high votes',
                 ])
                 ->default('selected_winners')
                 ->reactive()
@@ -58,10 +61,12 @@ class VoteSeeder extends Page
             Forms\Components\Toggle::make('balance_department_turnout')
                 ->label('Balance Department Turnout')
                 ->default(true)
+                ->visible(fn (callable $get) => $get('seed_mode') !== 'random_high_votes')
                 ->helperText('Try to distribute seeded turnout across departments proportionally to their voter population.'),
             Forms\Components\Toggle::make('allow_turnout_overflow')
                 ->label('Allow Turnout Overflow')
                 ->default(false)
+                ->visible(fn (callable $get) => !in_array($get('seed_mode'), ['boost_existing', 'random_high_votes'], true))
                 ->helperText('If off, the seeder will not exceed the turnout target just to satisfy minimum votes.'),
             Forms\Components\Select::make('turnout_mode')
                 ->label('Turnout Type')
@@ -76,6 +81,7 @@ class VoteSeeder extends Page
                 ->label('Target Turnout')
                 ->numeric()
                 ->minValue(1)
+                ->default(83)
                 ->required()
                 ->helperText('This is the total turnout to reach for the selected election, not an increment.'),
             Forms\Components\TextInput::make('minimum_votes')
@@ -84,6 +90,7 @@ class VoteSeeder extends Page
                 ->minValue(0)
                 ->default(0)
                 ->required()
+                ->visible(fn (callable $get) => $get('seed_mode') !== 'random_high_votes')
                 ->helperText('Before normal seeding continues, each eligible candidate will be raised to at least this many real votes when enough valid voters are available.'),
             Forms\Components\Repeater::make('position_configs')
                 ->label('Position Winners')
@@ -109,6 +116,34 @@ class VoteSeeder extends Page
                         ->helperText('Select up to the number of winners allowed for this position. Only eligible voters will be assigned to these candidates.'),
                 ])
                 ->helperText('Add one row per position you want to seed.'),
+            Forms\Components\Repeater::make('boost_position_configs')
+                ->label('Boost Position Turnout Ranges')
+                ->defaultItems(0)
+                ->reorderable(false)
+                ->collapsible()
+                ->visible(fn (callable $get) => $get('seed_mode') === 'boost_existing')
+                ->schema([
+                    Forms\Components\Select::make('position_id')
+                        ->label('Position')
+                        ->options(fn () => $this->getPositionOptions($this->election_id))
+                        ->searchable()
+                        ->required(),
+                    Forms\Components\TextInput::make('min_turnout_percent')
+                        ->label('Min %')
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(100)
+                        ->default(70)
+                        ->required(),
+                    Forms\Components\TextInput::make('max_turnout_percent')
+                        ->label('Max %')
+                        ->numeric()
+                        ->minValue(0)
+                        ->maxValue(100)
+                        ->default(83)
+                        ->required(),
+                ])
+                ->helperText('Seed each selected position to a turnout range using the existing election turnout pool only. Default range is 70% to 83%.'),
         ];
     }
 
@@ -129,7 +164,9 @@ class VoteSeeder extends Page
         }
 
         $totalVoters = Voter::count();
-        $targetTurnout = $this->resolveTurnoutCount($totalVoters);
+        $targetTurnout = $this->seed_mode === 'boost_existing'
+            ? (int) floor($totalVoters * 0.83)
+            : $this->resolveTurnoutCount($totalVoters);
 
         if ($targetTurnout < 1) {
             $this->notifyError('Target turnout must be at least 1 voter.');
@@ -154,11 +191,11 @@ class VoteSeeder extends Page
             ->get()
             ->keyBy('id');
 
-        $departmentTurnoutPlan = $this->balance_department_turnout
+        $departmentTurnoutPlan = ($this->balance_department_turnout && $this->seed_mode !== 'random_high_votes')
             ? $this->buildDepartmentTurnoutPlan($targetTurnout, $existingParticipants)
             : null;
 
-        $newParticipantIds = $this->balance_department_turnout
+        $newParticipantIds = ($this->balance_department_turnout && $this->seed_mode !== 'random_high_votes')
             ? $this->selectNewParticipantIdsByDepartment(
                 $existingParticipantIds,
                 $targetTurnout - $existingTurnout,
@@ -183,9 +220,11 @@ class VoteSeeder extends Page
                 ->keyBy('id')
         );
 
-        $positionPayloads = $this->seed_mode === 'boost_existing'
-            ? $this->buildBoostPayloads($election->id)
-            : $this->buildPositionPayloads($election->id);
+        $positionPayloads = match ($this->seed_mode) {
+            'boost_existing' => $this->buildBoostPayloads($election->id, $participants),
+            'random_high_votes' => $this->buildRandomHighVotePayloads($election->id),
+            default => $this->buildPositionPayloads($election->id),
+        };
 
         if ($positionPayloads === null) {
             return;
@@ -311,7 +350,93 @@ class VoteSeeder extends Page
             ->send();
     }
 
-    private function buildBoostPayloads(int $electionId): ?array
+    private function buildBoostPayloads(int $electionId, EloquentCollection $participants): ?array
+    {
+        $boostConfigs = blank($this->boost_position_configs)
+            ? Position::query()
+                ->where('election_id', $electionId)
+                ->orderBy('name')
+                ->get()
+                ->map(fn (Position $position) => [
+                    'position_id' => $position->id,
+                    'min_turnout_percent' => 70,
+                    'max_turnout_percent' => 83,
+                ])
+                ->all()
+            : $this->boost_position_configs;
+
+        $positionIds = collect($boostConfigs)
+            ->pluck('position_id')
+            ->filter()
+            ->values();
+
+        if ($positionIds->unique()->count() !== $positionIds->count()) {
+            $this->notifyError('Each boost position can only be configured once.');
+
+            return null;
+        }
+
+        $positions = Position::with([
+            'candidates' => fn ($query) => $query
+                ->where('election_id', $electionId)
+                ->with(['voter.course']),
+        ])
+            ->where('election_id', $electionId)
+            ->whereIn('id', $positionIds)
+            ->get();
+
+        if ($positions->isEmpty()) {
+            $this->notifyError('No positions found for the selected election.');
+
+            return null;
+        }
+
+        $payloads = [];
+
+        foreach ($boostConfigs as $config) {
+            $position = $positions->firstWhere('id', $config['position_id'] ?? null);
+
+            if (!$position) {
+                $this->notifyError('One of the selected boost positions does not belong to the selected election.');
+
+                return null;
+            }
+
+            $candidates = $position->candidates->values();
+
+            if ($candidates->isEmpty()) {
+                continue;
+            }
+
+            $tallies = $this->getCurrentTallies($candidates, $electionId);
+            $assignedVotes = array_sum($tallies);
+            $targetVotes = $this->resolveBoostTargetVotes($config, $position, $participants, $assignedVotes);
+
+            if ($targetVotes === null) {
+                return null;
+            }
+
+            $payloads[] = [
+                'position' => $position,
+                'candidates' => $candidates,
+                'tallies' => $tallies,
+                'mode' => 'weighted',
+                'assigned_votes' => $assignedVotes,
+                'target_votes' => $targetVotes,
+                'preferred_candidate_ids' => $this->resolvePreferredCandidateIds($position, $candidates, $tallies),
+            ];
+        }
+
+        if (empty($payloads)) {
+            $this->notifyError('No positions with candidates were found for the selected election.');
+
+            return null;
+        }
+
+        return $payloads;
+    }
+
+    private function buildRandomHighVotePayloads(int $electionId): ?array
     {
         $positions = Position::with([
             'candidates' => fn ($query) => $query
@@ -337,14 +462,12 @@ class VoteSeeder extends Page
                 continue;
             }
 
-            $tallies = $this->getCurrentTallies($candidates, $electionId);
-
             $payloads[] = [
                 'position' => $position,
                 'candidates' => $candidates,
-                'tallies' => $tallies,
-                'mode' => 'weighted',
-                'assigned_votes' => array_sum($tallies),
+                'tallies' => $this->getCurrentTallies($candidates, $electionId),
+                'mode' => 'random_high',
+                'assigned_votes' => $this->getPositionAssignedVoteCount($position->id, $electionId),
             ];
         }
 
@@ -536,6 +659,50 @@ class VoteSeeder extends Page
             ->count();
     }
 
+    private function resolveBoostTargetVotes(
+        array $config,
+        Position $position,
+        EloquentCollection $participants,
+        int $currentAssignedVotes
+    ): ?int {
+        $minPercent = max(0, min(100, (int) ($config['min_turnout_percent'] ?? 0)));
+        $maxPercent = max(0, min(100, (int) ($config['max_turnout_percent'] ?? 0)));
+
+        if ($minPercent > $maxPercent) {
+            $this->notifyError("{$position->name} has an invalid turnout range.");
+
+            return null;
+        }
+
+        $eligibleParticipantCount = $participants
+            ->filter(function (Voter $participant) use ($position) {
+                return $position->candidates->contains(
+                    fn (Candidate $candidate) => $this->candidateCanReceiveVoteFromVoter($candidate, $position, $participant)
+                );
+            })
+            ->count();
+
+        $maxAllowedVotes = $this->getPositionMaxAllowedVotes($position, $eligibleParticipantCount);
+        $minVotes = (int) ceil(($participants->count() * $minPercent) / 100);
+        $maxVotes = (int) floor(($participants->count() * $maxPercent) / 100);
+        $minVotes = min($maxAllowedVotes, $minVotes);
+        $maxVotes = min($maxAllowedVotes, $maxVotes);
+
+        if ($maxVotes < $minVotes) {
+            $this->notifyError("{$position->name} cannot reach the requested turnout range with the current election turnout.");
+
+            return null;
+        }
+
+        if ($currentAssignedVotes > $maxVotes) {
+            $this->notifyError("{$position->name} already has {$currentAssignedVotes} votes, above the configured max turnout range.");
+
+            return null;
+        }
+
+        return random_int(max($currentAssignedVotes, $minVotes), $maxVotes);
+    }
+
     private function applyMinimumVotesForPayload(
         array &$payload,
         EloquentCollection &$participants,
@@ -547,7 +714,7 @@ class VoteSeeder extends Page
     ): array {
         $minimumVotes = max(0, (int) $this->minimum_votes);
 
-        if (($payload['mode'] ?? null) === 'weighted' && $payload['candidates']->count() > 1) {
+        if (in_array(($payload['mode'] ?? null), ['weighted', 'random_high'], true) && $payload['candidates']->count() > 1) {
             $minimumVotes = max(1, $minimumVotes);
         }
 
@@ -606,6 +773,10 @@ class VoteSeeder extends Page
 
     private function resolvePositionVoteLimit(array $payload, EloquentCollection $participants): int
     {
+        if (($payload['mode'] ?? null) === 'weighted' && isset($payload['target_votes'])) {
+            return (int) $payload['target_votes'];
+        }
+
         $eligibleCount = $participants
             ->filter(function (Voter $participant) use ($payload) {
                 return $payload['candidates']->contains(
@@ -615,6 +786,15 @@ class VoteSeeder extends Page
             ->count();
 
         if ($payload['candidates']->count() === 1 && $eligibleCount > 1) {
+            return max(0, $eligibleCount - 1);
+        }
+
+        return $eligibleCount;
+    }
+
+    private function getPositionMaxAllowedVotes(Position $position, int $eligibleCount): int
+    {
+        if ($position->candidates->count() === 1 && $eligibleCount > 1) {
             return max(0, $eligibleCount - 1);
         }
 
@@ -751,7 +931,7 @@ class VoteSeeder extends Page
             return $participant;
         }
 
-        if (!$this->allow_turnout_overflow) {
+        if (($position->id && $this->seed_mode === 'boost_existing') || !$this->allow_turnout_overflow) {
             return null;
         }
 
@@ -794,7 +974,15 @@ class VoteSeeder extends Page
     private function pickCandidateForPayload(array $payload, EloquentCollection $eligibleCandidates): Candidate
     {
         if (($payload['mode'] ?? 'balanced') === 'weighted') {
-            return $this->pickWeightedCandidate($eligibleCandidates, $payload['tallies']);
+            return $this->pickWeightedCandidate(
+                $eligibleCandidates,
+                $payload['tallies'],
+                $payload['preferred_candidate_ids'] ?? []
+            );
+        }
+
+        if (($payload['mode'] ?? 'balanced') === 'random_high') {
+            return $this->pickRandomHighVoteCandidate($eligibleCandidates, $payload['tallies']);
         }
 
         return $eligibleCandidates
@@ -802,9 +990,21 @@ class VoteSeeder extends Page
             ->first();
     }
 
-    private function pickWeightedCandidate(EloquentCollection $eligibleCandidates, array $tallies): Candidate
+    private function pickWeightedCandidate(
+        EloquentCollection $eligibleCandidates,
+        array $tallies,
+        array $preferredCandidateIds = []
+    ): Candidate
     {
-        $weightedCandidates = $eligibleCandidates
+        $pool = !empty($preferredCandidateIds)
+            ? $eligibleCandidates->whereIn('id', $preferredCandidateIds)->values()
+            : $eligibleCandidates->values();
+
+        if ($pool->isEmpty()) {
+            $pool = $eligibleCandidates->values();
+        }
+
+        $weightedCandidates = $pool
             ->map(function (Candidate $candidate) use ($tallies) {
                 return [
                     'candidate' => $candidate,
@@ -826,6 +1026,34 @@ class VoteSeeder extends Page
         }
 
         return $weightedCandidates->last()['candidate'];
+    }
+
+    private function resolvePreferredCandidateIds(
+        Position $position,
+        EloquentCollection $candidates,
+        array $tallies
+    ): array {
+        $winnerCount = max(1, (int) $position->max_winners);
+
+        return $candidates
+            ->sortByDesc(fn (Candidate $candidate) => $tallies[$candidate->id] ?? 0)
+            ->take($winnerCount)
+            ->pluck('id')
+            ->all();
+    }
+
+    private function pickRandomHighVoteCandidate(EloquentCollection $eligibleCandidates, array $tallies): Candidate
+    {
+        $ordered = $eligibleCandidates
+            ->sortBy(fn (Candidate $candidate) => $tallies[$candidate->id] ?? 0)
+            ->values();
+
+        $lowestCount = $tallies[$ordered->first()->id] ?? 0;
+        $lowestGroup = $ordered
+            ->takeWhile(fn (Candidate $candidate) => ($tallies[$candidate->id] ?? 0) === $lowestCount)
+            ->values();
+
+        return $lowestGroup->random();
     }
 
     private function pickParticipantByDepartmentNeed(EloquentCollection $participants, array $departmentTurnoutPlan): ?Voter
@@ -964,9 +1192,11 @@ class VoteSeeder extends Page
 
     private function getSeedModeLabel(): string
     {
-        return $this->seed_mode === 'boost_existing'
-            ? 'boost current standings'
-            : 'selected winners';
+        return match ($this->seed_mode) {
+            'boost_existing' => 'boost current standings',
+            'random_high_votes' => 'random high votes',
+            default => 'selected winners',
+        };
     }
 
     public static function shouldRegisterNavigation(): bool
