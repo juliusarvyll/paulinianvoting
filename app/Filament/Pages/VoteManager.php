@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Candidate;
+use App\Models\VoterElectionParticipation;
 use App\Models\Voter;
 use App\Models\Vote;
 use Filament\Forms;
@@ -133,15 +134,19 @@ class VoteManager extends Page
             if ($this->vote_source === 'random') {
                 $voters = Voter::inRandomOrder()
                     ->whereDoesntHave('votes', function ($q) use ($candidate) {
-                        $q->where('candidate_id', $candidate->id);
+                        $q->where('election_id', $candidate->election_id)
+                            ->where('position_id', $candidate->position_id);
                     })
                     ->limit($this->number_of_votes)
                     ->get();
             } else {
                 // Get voters who have voted in other positions but not this one
-                $voters = Voter::whereHas('votes')
+                $voters = Voter::whereHas('votes', function ($q) use ($candidate) {
+                        $q->where('election_id', $candidate->election_id);
+                    })
                     ->whereDoesntHave('votes', function ($q) use ($candidate) {
-                        $q->where('position_id', $candidate->position_id);
+                        $q->where('election_id', $candidate->election_id)
+                            ->where('position_id', $candidate->position_id);
                     })
                     ->inRandomOrder()
                     ->limit($this->number_of_votes)
@@ -154,9 +159,19 @@ class VoteManager extends Page
                     'voter_id' => $voter->id,
                     'candidate_id' => $candidate->id,
                     'position_id' => $candidate->position_id,
+                    'election_id' => $candidate->election_id,
                 ]);
-                $voter->has_voted = true;
-                $voter->save();
+
+                VoterElectionParticipation::firstOrCreate(
+                    [
+                        'voter_id' => $voter->id,
+                        'election_id' => $candidate->election_id,
+                    ],
+                    [
+                        'participated_at' => now(),
+                    ]
+                );
+
                 $votesAdded++;
             }
 
